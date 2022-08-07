@@ -3,6 +3,24 @@ import matplotlib.pyplot as plt
 import cvxpy as cp
 import time
 from scipy import sparse
+from scipy.signal import medfilt
+
+def spec_centroid(Mag, f1, f2):
+    """
+    Compute the spectral centroid of a magnitude short time frequency transform
+    within a particular frequency range
+
+    Parameters
+    ----------
+    Mag: ndarray(n_freq, N)
+        A magnitude spectrogram
+    f1: int
+        Minimum frequency index to use
+    f2: int
+        One beyond the maximum frequency index to use
+    """
+    f = np.arange(f1, f2)
+    return np.sum(Mag[f1:f2, :]*f[:, None], axis=0)/np.sum(Mag[f1:f2, :], axis=0)
 
 def spec_centroid_perturb(Mag, target, min_freq, max_freq, eps):
     """
@@ -35,8 +53,7 @@ def spec_centroid_perturb(Mag, target, min_freq, max_freq, eps):
     """
     ## Step 1: Compute the spectral centroid "cent" and normalize the target signal 
     ## into the range (mu(cent)-std(cent), mu(cent)+std(cent))
-    cent = np.sum(Mag[min_freq:max_freq, :]*np.arange(min_freq, max_freq)[:, None], axis=0) / np.sum(Mag[min_freq:max_freq], axis=0)
-    
+    cent = spec_centroid(Mag, min_freq, max_freq)
     target -= np.min(target)
     target /= np.max(target)
     target = np.mean(cent) + (target-0.5)*2*np.std(cent)
@@ -91,3 +108,38 @@ def spec_centroid_perturb(Mag, target, min_freq, max_freq, eps):
     MagRet[min_freq:max_freq, :] = np.reshape(np.array(x.value), (N, M)).T
 
     return dict(Mag=MagRet, cent=cent, target=target)
+
+
+def plot_stego_centroid_fit(f1, f2, orig, fit, target, med=31):
+    """
+    Plot the results of perturbing the spectral centroids
+
+    Parameters
+    ----------
+    f1: int
+        Minimum frequency index to use
+    f2: int
+        One beyond the maximum frequency index to use
+    orig: ndarray(n_freq, N)
+        Original magnitude spectrogram
+    fit: ndarray(n_freq, N)
+        Computed magnitude spectrogram
+    target: ndarray(T >= N)
+        Target signal
+    med: int
+        Amount by which to median filter the fitted centroid
+    """
+    plt.subplot(131)
+    plt.imshow(orig[f1:f2, :] - fit[f1:f2, :], aspect='auto', cmap='gray')
+    plt.gca().invert_yaxis()
+    plt.colorbar()
+
+    plt.subplot(132)
+    h = spec_centroid(fit, f1, f2)
+    h = medfilt(h, med)
+    plt.scatter(h, target[0:h.size])
+    plt.axis("equal")
+                    
+    plt.subplot(133)
+    plt.plot(target)
+    plt.plot(h)
