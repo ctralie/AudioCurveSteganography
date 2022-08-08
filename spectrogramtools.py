@@ -3,6 +3,65 @@ import matplotlib.pyplot as plt
 from scipy.spatial import KDTree
 from numba import jit
 
+hann = lambda win: 0.5*(1-np.cos(2*np.pi*np.arange(win)/win))
+
+def sdct(x, win, hop, winfn=hann):
+    """
+    Short time discrete cosine transform
+
+    Parameters
+    ----------
+    x: ndarray(N)
+        Input signal
+    win: int
+        Window length
+    hop: int
+        Hop length
+    winfn: function int->ndarray
+        Window function
+    
+    Returns
+    -------
+    ndarray(win, 1+(N-win)//hop)
+        Short time DCT spectrogram
+    """
+    from scipy.fft import dct
+    M = 0
+    if len(x) >= win:
+        M = (len(x)-win)//hop + 1
+    h = winfn(win)
+    S = np.zeros((win, M))
+    for i in range(M):
+        xi = x[i*hop:i*hop+win]
+        S[:, i] = dct(h*xi, type=2)
+    return S
+
+def isdct(S, hop, winfn=hann):
+    """
+    Inverse short time discrete cosine transform
+
+    Parameters
+    ----------
+    S: ndarray(win, M)
+        Short time DCT spectrogram
+    hop: int
+        Hop length
+    winfn: function int->ndarray
+        Window function
+    
+    Returns
+    -------
+    x: ndarray(win + (M-1)*hop)
+        Inverse signal
+    """
+    from scipy.fft import idct
+    win = S.shape[0]
+    h = winfn(win)/(0.5*win/hop)
+    N = win + hop*(S.shape[1]-1)
+    X = np.zeros(N)
+    for i in range(S.shape[1]):
+        X[i*hop:i*hop+win] += h*idct(S[:, i])
+    return X
 
 @jit(nopython=True)
 def get_maxes(S, max_freq, time_win, freq_win):
