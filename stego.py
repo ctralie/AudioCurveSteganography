@@ -22,7 +22,7 @@ def spec_centroid(Mag, f1, f2):
     f = np.arange(f1, f2)
     return np.sum(Mag[f1:f2, :]*f[:, None], axis=0)/np.sum(Mag[f1:f2, :], axis=0)
 
-def spec_centroid_perturb(Mag, target, min_freq, max_freq, eps):
+def spec_centroid_perturb(Mag, target, min_freq, max_freq, eps_add, eps_ratio):
     """
     Perturb the spectral centroid of a magnitude spectrogram within 
     a particular frequency range to best match some target signal, up to a scale
@@ -37,8 +37,10 @@ def spec_centroid_perturb(Mag, target, min_freq, max_freq, eps):
         Minimum frequency index to use
     max_freq: int
         One beyond the maximum frequency index to use
-    eps: float
-        Maximum amount of perturbation allowed at each frequency bin
+    eps_add: float
+        Maximum amount of additive perturbation allowed at each frequency bin
+    eps_ratio: float
+        Maximum amount of ratio perturbation allowed at each frequency bin
     
     Returns
     -------
@@ -74,6 +76,7 @@ def spec_centroid_perturb(Mag, target, min_freq, max_freq, eps):
     M = max_freq-min_freq
 
     x = cp.Variable(N*M)
+    x.value = (Mag[min_freq:max_freq, :].T).flatten()
 
     for i in range(N):
         # Setup spectral centroid matrix
@@ -99,14 +102,19 @@ def spec_centroid_perturb(Mag, target, min_freq, max_freq, eps):
     objective = cp.Minimize(cp.sum_squares(A@x - b))
     B = Mag[min_freq:max_freq, :]
     B = (B.T).flatten()
-    constraints = [B - eps <= x, x <= B + eps, Ac@x == norms]
+    constraints = [Ac@x == norms]
+    if eps_ratio > 0:
+        constraints += [np.minimum(B*(1-eps_ratio), B-eps_add) <= x, 
+                        x <= np.maximum(B*(1+eps_ratio), B+eps_add)]
+    else:
+        constraints += [B-eps_add <= x, x <= B+eps_add]
     tic = time.time()
     prob = cp.Problem(objective, constraints)
-    prob.solve()
+    prob.solve(warm_start=True)
     print("Elapsed Time: ", time.time()-tic)
     MagRet = np.array(Mag)
     MagRet[min_freq:max_freq, :] = np.reshape(np.array(x.value), (N, M)).T
-
+    
     return dict(Mag=MagRet, cent=cent, target=target)
 
 
