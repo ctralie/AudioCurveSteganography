@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import cvxpy as cp
 import time
 from scipy import sparse
+from scipy.sparse import linalg as slinalg
 from scipy.signal import medfilt
 
 def spec_centroid(Mag, f1, f2):
@@ -151,3 +152,97 @@ def plot_stego_centroid_fit(f1, f2, orig, fit, target, med=31):
     plt.subplot(133)
     plt.plot(target)
     plt.plot(h)
+
+
+def get_window_energy(x, win):
+    """
+    Return the sliding window squared energy of a signal
+
+    Parameters
+    ----------
+    x: ndarray(N)
+        Input signal
+    win: int
+        Window size
+    
+    Returns
+    -------
+    ndarray(N-win+1)
+        Windowed energy
+    """
+    eng = np.cumsum(np.concatenate(([0], x**2)))
+    return eng[win::]-eng[0:-win]
+
+def energy_perturb(x, target, win, lam):
+    """
+    Perturb the windowed energy of a signal to match a target.
+    Do an unconstrained least squares, trading off fit to original
+    signal and fit to target signal
+
+    Parameters
+    ----------
+    x: ndarray(N)
+        An array of samples
+    target: ndarray(T <= N-win+1)
+        Target signal
+    win: int
+        Length of sliding window
+    lam: float
+        Weight
+    
+    Returns
+    -------
+    dict(
+        target: ndarray(T)
+            The target signal, normalized to the range of cent
+    )
+    """
+    N = x.size
+    M = N-win+1 # Number of windows
+    T = target.size
+    assert(T <= M)
+
+    ## Step 1: Compute the windowed energy "wineng" and normalize the target signal 
+    ## into the range (mu(wineng)-std(wineng), mu(wineng)+std(wineng))
+    wineng =  get_window_energy(x, win)
+    target -= np.min(target)
+    target /= np.max(target)
+    target = np.mean(wineng) + (target-0.5)*2*np.std(wineng)
+
+    ## Step 2: Come up with system of linear equations
+    I1 = np.arange(T+win)
+    I2 = T + win + (np.arange(T)[:, None]*np.ones((1, win))).flatten()
+    I = np.concatenate((I1.flatten(), I2.flatten()))
+
+    J1 = np.arange(T+win)
+    J2 = np.arange(T)[:, None] + np.arange(win)[None, :]
+    J = np.concatenate((J1, J2.flatten()))
+    
+    V = np.ones(T+win+T*win, dtype=int)
+    V[(T+win)::] = lam
+
+    A = sparse.coo_matrix((V, (I, J)), shape=(2*T+win, T+win))
+    A = A.tocsr()
+    b = np.concatenate((x[0:T+win]**2, lam*target))
+    
+    ## Step 3: Solve system of equations
+    #"""
+    u = cp.Variable(T+win)
+    objective = cp.Minimize(cp.sum_squares(A@u - b))
+    constraints = [u >= 0]
+    tic = time.time()
+    prob = cp.Problem(objective, constraints)
+    prob.solve(warm_start=True)
+    print("Elapsed time least squares: ", time.time()-tic)
+    u = u.value
+    ubefore = np.array(u)
+    u[u < 0] = 0
+    #"""
+    #from sgd import stochastic_gradient_descent
+    #u = stochastic_gradient_descent(b, A, step_size=0.1, non_neg=True)
+    #ubefore = np.array(u)
+    
+    xres = np.array(x)
+    xres[0:win+T] = np.sign(x)[0:win+T]*np.sqrt(u)
+    
+    return dict(target=target, wineng=wineng, x=xres, u=ubefore)
