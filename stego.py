@@ -154,7 +154,7 @@ def plot_stego_centroid_fit(f1, f2, orig, fit, target, med=31):
     plt.plot(h)
 
 
-def get_window_energy(x, win):
+def get_window_energy(x, win, hop=1):
     """
     Return the sliding window squared energy of a signal
 
@@ -164,6 +164,8 @@ def get_window_energy(x, win):
         Input signal
     win: int
         Window size
+    hop: int
+        Hop length between windows
     
     Returns
     -------
@@ -171,9 +173,9 @@ def get_window_energy(x, win):
         Windowed energy
     """
     eng = np.cumsum(np.concatenate(([0], x**2)))
-    return eng[win::]-eng[0:-win]
+    return eng[win::hop]-eng[0:-win:hop]
 
-def energy_perturb(x, target, win, lam):
+def energy_perturb(x, target, win, hop, lam):
     """
     Perturb the windowed energy of a signal to match a target.
     Do an unconstrained least squares, trading off fit to original
@@ -187,6 +189,8 @@ def energy_perturb(x, target, win, lam):
         Target signal
     win: int
         Length of sliding window
+    hop: int
+        Hop length between windows
     lam: float
         Weight of audio fidelity
     
@@ -199,13 +203,13 @@ def energy_perturb(x, target, win, lam):
     """
     N = x.size
     T = target.size
-    assert(T <= N-win+1)
-    NT = T+win-1 # Number of samples involved
+    assert(T <= 1+(N-win)//hop)
+    NT = (T-1)*hop+win # Number of samples involved in the optimization (NT <= N)
     
 
     ## Step 1: Compute the windowed energy "wineng" and normalize the target signal 
     ## into the range (mu(wineng)-std(wineng), mu(wineng)+std(wineng))
-    wineng =  get_window_energy(x, win)[0:NT]
+    wineng =  get_window_energy(x, win, hop)[0:T]
     target -= np.min(target)
     target /= np.max(target)
     target = np.mean(wineng) + (target-0.5)*2*np.std(wineng)
@@ -216,7 +220,7 @@ def energy_perturb(x, target, win, lam):
     I = np.concatenate((I1.flatten(), I2.flatten()))
 
     J1 = np.arange(NT)
-    J2 = np.arange(T)[:, None] + np.arange(win)[None, :]
+    J2 = hop*np.arange(T)[:, None] + np.arange(win)[None, :]
     J = np.concatenate((J1, J2.flatten()))
     
     V = np.ones(NT+T*win, dtype=int)
@@ -229,6 +233,7 @@ def energy_perturb(x, target, win, lam):
     ## Step 3: Solve system of equations
     #"""
     u = cp.Variable(NT)
+    u.value = x[0:NT]
     objective = cp.Minimize(cp.sum_squares(A@u - b))
     constraints = [u >= 0]
     tic = time.time()
@@ -239,6 +244,13 @@ def energy_perturb(x, target, win, lam):
     ubefore = np.array(u)
     u[u < 0] = 0
     #"""
+
+    #from scipy.optimize import nnls
+    #tic = time.time()
+    #u = nnls(A.toarray(), b)[0]
+    #ubefore = np.array(u)
+    #print("Elapsed time nnls: ", time.time()-tic)
+
     #from sgd import stochastic_gradient_descent
     #u = stochastic_gradient_descent(b, A, x[0:T+win]**2, step_size=0.05, converge_on_r=0.1, non_neg=True)
     #ubefore = np.array(u)
