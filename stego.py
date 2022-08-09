@@ -188,7 +188,7 @@ def energy_perturb(x, target, win, lam):
     win: int
         Length of sliding window
     lam: float
-        Weight
+        Weight of audio fidelity
     
     Returns
     -------
@@ -198,36 +198,37 @@ def energy_perturb(x, target, win, lam):
     )
     """
     N = x.size
-    M = N-win+1 # Number of windows
     T = target.size
-    assert(T <= M)
+    assert(T <= N-win+1)
+    NT = T+win-1 # Number of samples involved
+    
 
     ## Step 1: Compute the windowed energy "wineng" and normalize the target signal 
     ## into the range (mu(wineng)-std(wineng), mu(wineng)+std(wineng))
-    wineng =  get_window_energy(x, win)
+    wineng =  get_window_energy(x, win)[0:NT]
     target -= np.min(target)
     target /= np.max(target)
     target = np.mean(wineng) + (target-0.5)*2*np.std(wineng)
 
     ## Step 2: Come up with system of linear equations
-    I1 = np.arange(T+win)
-    I2 = T + win + (np.arange(T)[:, None]*np.ones((1, win))).flatten()
+    I1 = np.arange(NT)
+    I2 = NT + (np.arange(T)[:, None]*np.ones((1, win))).flatten()
     I = np.concatenate((I1.flatten(), I2.flatten()))
 
-    J1 = np.arange(T+win)
+    J1 = np.arange(NT)
     J2 = np.arange(T)[:, None] + np.arange(win)[None, :]
     J = np.concatenate((J1, J2.flatten()))
     
-    V = np.ones(T+win+T*win, dtype=int)
-    V[(T+win)::] = lam
+    V = np.ones(NT+T*win, dtype=int)
+    V[0:NT] = lam
 
-    A = sparse.coo_matrix((V, (I, J)), shape=(2*T+win, T+win))
+    A = sparse.coo_matrix((V, (I, J)), shape=(NT+T, NT))
     A = A.tocsr()
-    b = np.concatenate((x[0:T+win]**2, lam*target))
+    b = np.concatenate((lam*x[0:NT]**2, target))
     
     ## Step 3: Solve system of equations
     #"""
-    u = cp.Variable(T+win)
+    u = cp.Variable(NT)
     objective = cp.Minimize(cp.sum_squares(A@u - b))
     constraints = [u >= 0]
     tic = time.time()
@@ -239,10 +240,10 @@ def energy_perturb(x, target, win, lam):
     u[u < 0] = 0
     #"""
     #from sgd import stochastic_gradient_descent
-    #u = stochastic_gradient_descent(b, A, step_size=0.1, non_neg=True)
+    #u = stochastic_gradient_descent(b, A, x[0:T+win]**2, step_size=0.05, converge_on_r=0.1, non_neg=True)
     #ubefore = np.array(u)
     
     xres = np.array(x)
-    xres[0:win+T] = np.sign(x)[0:win+T]*np.sqrt(u)
+    xres[0:NT] = np.sign(x)[0:NT]*np.sqrt(u)
     
     return dict(target=target, wineng=wineng, x=xres, u=ubefore)
