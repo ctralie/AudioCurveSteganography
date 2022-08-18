@@ -119,17 +119,27 @@ def dtw_backtrace(P, i, j, verbose=False):
 def dtw_cyclic_brute(csm):
     """
     Perform cyclic DTW between two time series, based on their cross-similarity matrix
-    
+    This is a brute force version that costs O(MN^2)
+
     Parameters
     ----------
     csm: ndarray(M, N)
         Cross-similarity matrix between X (of length M) and Y (of length N)
+    
+    Returns
+    -------
+    idx: int
+        Index of best shift
+    cost: float
+        Cost of best shifted DTW
+    path: ndarray(K, 2)
+        Warping path corresponding to best shifted DTW
     """
     M = csm.shape[0]
     N = csm.shape[1]
     D = np.concatenate((csm, csm), axis=1)
-    
-    # Try brute force first and examine warping paths, and if it works, then do recursion
+
+    min_idx = -1
     min_cost = np.inf
     min_path = np.array([])
     for k in range(N):
@@ -144,10 +154,10 @@ def dtw_cyclic_brute(csm):
             path = dtw_backtrace(P, M-1, N-1)
         path[:, 1] = (path[:, 1] + k) % N
         if cost < min_cost:
+            min_idx = k
             min_cost = cost
             min_path = np.array(path, dtype=int)
-    return min_cost, min_path
-
+    return min_idx, min_cost, min_path
 
 @jit(nopython=True)
 def dtw_constrained(csm, S, P, jstart, left_path, right_path):
@@ -169,11 +179,6 @@ def dtw_constrained(csm, S, P, jstart, left_path, right_path):
         Left warping path
     right_path: ndarray(K2, 2)
         Right warping path
-    
-    Returns
-    -------
-    S: ndarray(M, N)
-        Dynamic programming matrix
     """
     M = csm.shape[0]
     N = csm.shape[1]//2
@@ -189,7 +194,7 @@ def dtw_constrained(csm, S, P, jstart, left_path, right_path):
     ## Step 3: Do constrained dynamic time warping
     S[0, jstart] = csm[0, jstart]
     for i in range(M):
-        for j in range(j1[i], j2[i]+1):
+        for j in range(int(j1[i]), int(j2[i]+1)):
             if i != 0 or j != jstart:
                 S[i,j] = csm[i, j]
                 mn = np.inf
@@ -211,3 +216,101 @@ def dtw_constrained(csm, S, P, jstart, left_path, right_path):
                         mnidx = DTW_DIAG
                 S[i, j] += mn
                 P[i, j] = mnidx
+
+
+def dtw_cyclic_rec(D, S, P, l, left_path, r, right_path, solutions):
+    """
+    Recursively perform cyclic DTW between two time series, based on their cross-similarity matrix
+    
+    Parameters
+    ----------
+    D: ndarray(M, 2N)
+        Twice repeated cross-similarity matrix between X (of length M) and Y (of length N)
+    S: ndarray(M, 2N)
+        Staging area for dtw
+    P: ndarray(M, 2N)
+        Staging area for backpointers
+    l: int
+        Index of left warping path
+    left_path: ndarray(Kl, 2)
+        Left warping path
+    r: int
+        Index of right warping path
+    right_path: ndarray(Kr, 2)
+        Right warping path
+    solutions: dictionary of index->(cost, path)
+        All costs and warping paths
+    """
+    M = D.shape[0]
+    N = D.shape[1]//2
+    if r > l+1:
+        k = (r+l)//2
+        jstart = k
+        jend = jstart + N
+        S = -1*np.ones_like(D)
+        P = -1*np.ones(D.shape, dtype=int)
+        dtw_constrained(D, S, P, jstart, left_path, right_path)
+        mid_cost = np.inf
+        if S[-1, jend] < S[-1, jend-1]:
+            mid_path = dtw_backtrace(P[:, k:k+N+1], M-1, N)
+            mid_cost = S[-1, jend]
+        else:
+            mid_path = dtw_backtrace(P[:, k:k+N+1], M-1, N-1)
+            mid_cost = S[-1, jend-1]
+        mid_path[:, 1] += k
+        solutions[k] = (mid_cost, mid_path)
+        # Recursive calls
+        dtw_cyclic_rec(D, S, P, l, left_path, k, mid_path, solutions)
+        dtw_cyclic_rec(D, S, P, k, mid_path, r, right_path, solutions)
+
+def dtw_cyclic(csm):
+    """
+    Recursively perform cyclic DTW between two time series, based on their cross-similarity matrix
+    
+    Parameters
+    ----------
+    csm: ndarray(M, 2N)
+        Cross-similarity matrix between X (of length M) and Y (of length N)
+
+    Returns
+    -------
+    idx: int
+        Index of best shift
+    cost: float
+        Cost of best shifted DTW
+    path: ndarray(K, 2)
+        Warping path corresponding to best shifted DTW
+    """
+    M = csm.shape[0]
+    N = csm.shape[1]
+    D = np.concatenate((csm, csm), axis=1)
+    
+    ## Step 1: Compute left path
+    S, P = dtw(D[:, 0:N+1])
+    if S[-1, -1] < S[-1, -2]:
+        left_path = dtw_backtrace(P, M-1, N)
+    else:
+        left_path = dtw_backtrace(P, M-1, N-1)
+    left_cost = min(S[-1, -1], S[-1, -2])
+    
+    ## Step 2: Compute right path
+    S, P = dtw(D[:, N-1::])
+    if S[-1, -1] < S[-1, -2]:
+        right_path = dtw_backtrace(P, M-1, N)
+    else:
+        right_path = dtw_backtrace(P, M-1, N-1)
+    right_cost = min(S[-1, -1], S[-1, -2])
+    right_path[:, 1] = right_path[:, 1] + N-1
+    
+    ## Step 3: Kick off recursion
+    S = np.zeros_like(csm)
+    P = np.zeros(S.shape, dtype=int)
+    solutions = {0:(left_cost, left_path), N-1:(right_cost, right_path)}
+    dtw_cyclic_rec(D, S, P, 0, left_path, N-1, right_path, solutions)
+    
+    ## Step 4: Extract best cost path
+    costs = np.array([solutions[i][0] for i in range(N)])
+    idx = np.argmin(costs)
+    path = solutions[idx][1]
+    path[:, 1] %= N
+    return idx, costs[idx], path
