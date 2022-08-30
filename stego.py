@@ -1,3 +1,4 @@
+from curses import A_COLOR
 import numpy as np
 import matplotlib.pyplot as plt
 import cvxpy as cp
@@ -259,3 +260,110 @@ def energy_perturb(x, target, win, hop, lam):
     xres[0:NT] = np.sign(x)[0:NT]*np.sqrt(u)
     
     return dict(target=target, wineng=wineng, x=xres, u=ubefore)
+
+
+
+def windowed_spec_centroid_perturb(Mag, target, win, min_freq, max_freq, eps_add, eps_ratio):
+    """
+    Perturb a sliding window of the spectral centroid of a magnitude spectrogram within 
+    a particular frequency range to best match some target signal, up to a scale
+
+    Parameters
+    ----------
+    Mag: ndarray(n_freq, N)
+        A magnitude spectrogram
+    target: ndarray(T >= N)
+        Target signal
+    win: int
+        Length of sliding window
+    min_freq: int
+        Minimum frequency index to use
+    max_freq: int
+        One beyond the maximum frequency index to use
+    eps_add: float
+        Maximum amount of additive perturbation allowed at each frequency bin
+    eps_ratio: float
+        Maximum amount of ratio perturbation allowed at each frequency bin
+    
+    Returns
+    -------
+    dict(
+        Mag: ndarray(n_freq, N)
+            The modified magnitude spectrogram,
+        cent: ndarray(N)
+            The computed original spectral centroids in the range [min_freq, max_freq)
+        target: ndarray(T)
+            The target signal, normalized to the range of cent
+    )
+    """
+
+    ## Step 1: Setup sparse optimization problem for perturbing the magnitude 
+    ## spectrogram values so that the distance between the target and the 
+    ## windowed spectral centroid is minimized in a least squared sense
+    I = []
+    J = []
+    V = []
+    b = []
+
+    Ic = []
+    Jc = []
+    Vc = []
+    norms = []
+
+    N = Mag.shape[1]
+    M = max_freq-min_freq
+
+    for i in range(N-win+1):
+        # Setup spectral centroid matrix
+        norm = np.sum(Mag[min_freq:max_freq, i:i+win])
+        I += [i]*M*win
+        J += np.arange(i*M, (i+win)*M).tolist()
+        Vi = np.ones((win, 1))*np.arange(min_freq, max_freq)[None, :]
+        V += (Vi.flatten()).tolist()
+        # Add constraints that each norm must sum to what it is now
+        Ic += [i]*M*win
+        Jc += np.arange(i*M, (i+win)*M).tolist()
+        Vc += np.ones(M*win).tolist()
+        norms.append(norm)
+        b.append(target[i])
+
+
+    A = sparse.coo_matrix((V, (I, J)), shape=(N-win+1, N*M))
+    b = np.array(b)
+    Ac = sparse.coo_matrix((Vc, (Ic, Jc)), shape=(N-win+1, N*M))
+    norms = np.array(norms)
+    
+    ## Step 2: Normalize the target so it's within a reasonable range of
+    ## the current windowed spectral centroid
+    x_orig = (Mag[min_freq:max_freq, :].T).flatten()
+    cent_orig = A.dot(x_orig) / Ac.dot(x_orig)
+    xrg = 2*np.std(cent_orig)
+    xmu = np.mean(cent_orig)
+    xmin = max(min_freq, xmu-xrg)
+    xmax = min(max_freq, xmu+xrg)
+
+    target -= np.min(target)
+    target /= np.max(target)
+    target = xmin + target*(xmax-xmin)
+
+    ## Step 3: Solve the optimization problem and return a spectrogram
+    ## with the result
+    x = cp.Variable(N*M)
+    objective = cp.Minimize(cp.sum_squares(A@x - b))
+    B = Mag[min_freq:max_freq, :]
+    B = (B.T).flatten()
+    constraints = [Ac@x == norms]
+    if eps_ratio > 0:
+        constraints += [np.minimum(B*(1-eps_ratio), B-eps_add) <= x, 
+                        x <= np.maximum(B*(1+eps_ratio), B+eps_add)]
+    else:
+        constraints += [B-eps_add <= x, x <= B+eps_add]
+    tic = time.time()
+    prob = cp.Problem(objective, constraints)
+    prob.solve(warm_start=True)
+    print("Elapsed Time: ", time.time()-tic)
+    MagRet = np.array(Mag)
+    MagRet[min_freq:max_freq, :] = np.reshape(np.array(x.value), (N, M)).T
+    cent = A.dot(x) / Ac.dot(x)
+    
+    return dict(cent_orig=cent_orig, target=target, Mag=MagRet, cent=cent)
