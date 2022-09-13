@@ -84,6 +84,81 @@ def get_maxes(S, max_freq, time_win, freq_win):
     return ret
 
 
+
+halfsine = lambda W: np.sin(np.pi*np.arange(W)/float(W))
+hann = lambda W: 0.5*(1 - np.cos(2*np.pi*np.arange(W)/W))
+def blackman(W):
+    alpha = 0.16
+    a0 = (1-alpha)/2
+    a1 = 0.5
+    a2 = alpha/2
+    t = np.arange(W)/W
+    return a0 - a1*np.cos(2*np.pi*t) + a2*np.cos(4*np.pi*t)
+
+def stft(X, W, H, winfunc=blackman):
+    """
+    :param X: An Nx1 audio signal
+    :param W: A window size
+    :param H: A hopSize
+    :param winfunc: Handle to a window function
+    """
+    Q = W/H
+    if Q - np.floor(Q) > 0:
+        print('Warning: Window size is not integer multiple of hop size')
+    if not winfunc:
+        #Use half sine by default
+        winfunc = halfsine
+    win = winfunc(W)
+    NWin = int(np.floor((X.size - W)/float(H)) + 1)
+    S = np.zeros((W, NWin), dtype = np.complex)
+    for i in range(NWin):
+        S[:, i] = np.fft.fft(win*X[np.arange(W) + (i-1)*H])
+    #Second half of the spectrum is redundant for real signals
+    if W%2 == 0:
+        #Even Case
+        S = S[0:int(W/2)+1, :]
+    else:
+        #Odd Case
+        S = S[0:int((W-1)/2)+1, :]
+    return S
+
+def istft(pS, W, H, winfunc=blackman):
+    """
+    :param pS: An NBins x NWindows spectrogram
+    :param W: A window size
+    :param H: A hopSize
+    :param winfunc: Handle to a window function
+    :returns S: Spectrogram
+    """
+    #First put back the entire redundant STFT
+    S = np.array(pS, dtype = np.complex)
+    if W%2 == 0:
+        #Even Case
+        S = np.concatenate((S, np.flipud(np.conj(S[1:-1, :]))), 0)
+    else:
+        #Odd Case
+        S = np.concatenate((S, np.flipud(np.conj(S[1::, :]))), 0)
+    
+    #Figure out how long the reconstructed signal actually is
+    N = W + H*(S.shape[1] - 1)
+    X = np.zeros(N, dtype = np.complex)
+    
+    #Setup the window
+    Q = W/H
+    if Q - np.floor(Q) > 0:
+        print('Warning: Window size is not integer multiple of hop size')
+    if not winfunc:
+        #Use half sine by default
+        winfunc = halfsine
+    win = winfunc(W)
+    win = win/(Q/2.0)
+
+    #Do overlap/add synthesis
+    for i in range(S.shape[1]):
+        X[i*H:i*H+W] += win*np.fft.ifft(S[:, i])
+    return X
+
+
 def stft_disjoint(x, win_length):
     """
     Make the hop length and the win length the same
@@ -144,3 +219,49 @@ def make_voronoi_image(coords, phases):
     tree = KDTree(coords)
     _, idx = tree.query(np.array([I, J]).T)
     return np.reshape(phases[idx], shape)
+
+
+def getNSGT(X, Fs, resol=24):
+    """
+    Perform a Nonstationary Gabor Transform implementation of CQT
+    :param X: A 1D array of audio samples
+    :param Fs: Sample rate
+    :param resol: Number of CQT bins per octave
+    """
+    from nsgt import NSGT,OctScale
+    scl = OctScale(50, Fs, resol)
+    nsgt = NSGT(scl, Fs, len(X), matrixform=True)
+    C = nsgt.forward(X)
+    return np.array(C)
+
+def getiNSGT(C, L, Fs, resol=24):
+    """
+    Perform an inverse Nonstationary Gabor Transform
+    :param C: An NBinsxNFrames CQT array
+    :param L: Number of samples in audio file
+    :param Fs: Sample rate
+    :param resol: Number of CQT bins per octave
+    """
+    from nsgt import NSGT,OctScale
+    scl = OctScale(50, Fs, resol)
+    nsgt = NSGT(scl, Fs, L, matrixform=True)
+    return nsgt.backward(C)
+
+def getiNSGTGriffinLim(C, L, Fs, resol=24, randPhase = False, NIters = 20):
+    from nsgt import NSGT,OctScale
+    scl = OctScale(50, Fs, resol)
+    nsgt = NSGT(scl, Fs, L, matrixform=True)
+    eps = 2.2204e-16
+    if randPhase:
+        C = np.exp(np.complex(0, 1)*np.random.rand(C.shape[0], C.shape[1]))*C
+    A = np.array(C, dtype = np.complex)
+    for i in range(NIters):
+        print("iNSGT Griffin Lim Iteration %i of %i"%(i+1, NIters))
+        Ai = np.array(nsgt.forward(nsgt.backward(C)))
+        A = np.zeros_like(C)
+        A[:, 0:Ai.shape[1]] = Ai
+        Norm = np.sqrt(A*np.conj(A))
+        Norm[Norm < eps] = 1
+        A = np.abs(C)*(A/Norm)
+    X = nsgt.backward(A)
+    return np.real(X)
