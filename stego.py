@@ -140,34 +140,59 @@ def get_windowed_spec_centroid_matrices(Mag, min_freq, max_freq, win):
     Ac: sparse array(N, N*M)
         Individual denominator matrix
     """
-    In = []
-    Jn = []
-    Vn = []
-
-    Id = []
-    Jd = []
-    Vd = []
-
     N = Mag.shape[1]
     M = max_freq-min_freq
+    
+    In = np.zeros((N-win+1)*M*win, dtype=int)
+    Jn = np.zeros_like(In)
+    Vn = np.zeros(In.size)
+    
+    Id = np.zeros_like(In)
+    Jd = np.zeros_like(Jn)
+    Vd = np.zeros_like(Vn)
+    
     for i in range(N-win+1):
         # Setup spectral numerator matrix
-        In += [i]*M*win
-        Jn += np.arange(i*M, (i+win)*M).tolist()
+        In[i*M*win:(i+1)*M*win] = i
+        Jn[i*M*win:(i+1)*M*win] = np.arange(i*M, (i+win)*M)
         Vi = np.ones((win, 1))*np.arange(min_freq, max_freq)[None, :]
         Vi = Vi/np.sum(Mag[min_freq:max_freq, i:i+win])
-        Vn += (Vi.flatten()).tolist()
+        Vn[i*M*win:(i+1)*M*win] = Vi.flatten()
         # Setup spectral centroid denominator matrix
-        Id += [i]*M*win
-        Jd += np.arange(i*M, (i+win)*M).tolist()
-        Vd += np.ones(M*win).tolist()
+        Id[i*M*win:(i+1)*M*win] = i
+        Jd[i*M*win:(i+1)*M*win] = np.arange(i*M, (i+win)*M)
+        Vd[i*M*win:(i+1)*M*win] = np.ones(M*win)
 
 
     An = sparse.coo_matrix((Vn, (In, Jn)), shape=(N-win+1, N*M))
     Ad = sparse.coo_matrix((Vd, (Id, Jd)), shape=(N-win+1, N*M))
     return An, Ad
 
-def windowed_spec_centroid_perturb(Mag, target, win, min_freq, max_freq, eps_add, eps_ratio=0):
+
+def get_normalized_target(cent_orig, target, min_freq, max_freq, stdev=2):
+    """
+    Normalize the target to the range of the centroid
+
+    cent_orig: ndarray(N)
+        Original centroid
+    target: ndarray(T >= N)
+        Target signal
+    min_freq: int
+        Minimum frequency index to use
+    max_freq: int
+        One beyond the maximum frequency index to use
+    stdev: float
+        How many standard deviations to fit
+    """
+    xrg = stdev*np.std(cent_orig)
+    xmu = np.mean(cent_orig)
+    xmin = max(min_freq, xmu-xrg)
+    xmax = min(max_freq, xmu+xrg)
+    target -= np.min(target)
+    target /= np.max(target)
+    return xmin + target*(xmax-xmin)
+
+def windowed_spec_centroid_perturb(Mag, target, win, min_freq, max_freq, eps_add, eps_ratio=0, Mag_fixed=np.array([])):
     """
     Perturb a sliding window of the spectral centroid of a magnitude spectrogram within 
     a particular frequency range to best match some target signal, up to a scale
@@ -176,7 +201,7 @@ def windowed_spec_centroid_perturb(Mag, target, win, min_freq, max_freq, eps_add
     ----------
     Mag: ndarray(n_freq, N)
         A magnitude spectrogram
-    target: ndarray(T >= N)
+    target: ndarray(N-win+1)
         Target signal
     win: int
         Length of sliding window
@@ -188,7 +213,8 @@ def windowed_spec_centroid_perturb(Mag, target, win, min_freq, max_freq, eps_add
         Maximum amount of additive perturbation allowed at each frequency bin
     eps_ratio: float
         Maximum amount of ratio perturbation allowed at each frequency bin
-    
+    Mag_fixed: ndarray(n_freq, M)
+        Magnitude coefficients to hold fixed, starting from the beginning
     Returns
     -------
     dict(
@@ -196,41 +222,21 @@ def windowed_spec_centroid_perturb(Mag, target, win, min_freq, max_freq, eps_add
             The modified magnitude spectrogram,
         cent: ndarray(N)
             The computed original spectral centroids in the range [min_freq, max_freq)
-        target: ndarray(T)
-            The target signal, normalized to the range of cent
     )
     """
-
     ## Step 1: Setup sparse optimization problem for perturbing the magnitude 
     ## spectrogram values so that the distance between the target and the 
     ## windowed spectral centroid is minimized in a least squared sense
     M = max_freq - min_freq
     N = Mag.shape[1]
+    assert(target.size == N-win+1)
     An, Ad = get_windowed_spec_centroid_matrices(Mag, min_freq, max_freq, win)
-    
-    ## Step 2: Normalize the target so it's within a reasonable range of
-    ## the current windowed spectral centroid
     x_orig = (Mag[min_freq:max_freq, :].T).flatten()
-    cent_orig = An.dot(x_orig)
-    xrg = 2*np.std(cent_orig)
-    xmu = np.mean(cent_orig)
-    xmin = max(min_freq, xmu-xrg)
-    xmax = min(max_freq, xmu+xrg)
 
-    target -= np.min(target)
-    target /= np.max(target)
-    target = xmin + target*(xmax-xmin)
-    b = target[0:N-win+1]
-
-    ## Step 3: Solve the optimization problem and return a spectrogram
+    ## Step 2: Solve the optimization problem and return a spectrogram
     ## with the result
-    #from opt import lsq_box
-    #tic = time.time()
-    #x, resid = lsq_box(A, b, )
-
-    #"""
     x = cp.Variable(N*M)
-    objective = cp.Minimize(cp.sum_squares(An@x - b))
+    objective = cp.Minimize(cp.sum_squares(An@x - target))
     constraints = [Ad@x == Ad.dot(x_orig)]
     xmin = x_orig - eps_add
     xmax = x_orig + eps_add
@@ -239,22 +245,73 @@ def windowed_spec_centroid_perturb(Mag, target, win, min_freq, max_freq, eps_add
         xmax = np.maximum(xmax, x_orig*(1+eps_ratio))
     xmin[xmin < 0] = 0
     constraints += [xmin <= x, x <= xmax]
+    if Mag_fixed.size > 0:
+        m = (Mag_fixed[min_freq:max_freq, :].T).flatten()
+        constraints += [x[0:Mag_fixed.size] == m]
     tic = time.time()
     prob = cp.Problem(objective, constraints)
     prob.solve()
-    #"""
-
-
     print("Elapsed Time: ", time.time()-tic)
     x = np.array(x.value)
     MagRet = np.array(Mag)
     MagRet[min_freq:max_freq, :] = np.reshape(x, (N, M)).T
 
-
     x = (MagRet[min_freq:max_freq, :].T).flatten()
     cent = An.dot(x)
-    
-    return dict(cent_orig=cent_orig, b=b, Mag=MagRet, cent=cent)
+    return dict(Mag=MagRet, cent=cent)
+
+
+def block_windowed_spec_centroid_perturb(Mag, target, win, block_win, min_freq, max_freq, eps_add, eps_ratio=0):
+    """
+    Perturb a sliding window of the spectral centroid of a magnitude spectrogram within 
+    a particular frequency range to best match some target signal, up to a scale.
+    Split it up into smaller overlapping problems for efficiency
+
+    Parameters
+    ----------
+    Mag: ndarray(n_freq, N)
+        A magnitude spectrogram
+    target: ndarray(T >= N)
+        Target signal
+    win: int
+        Length of sliding window within a block
+    block_win: int
+        Length of block, in number of windows
+    min_freq: int
+        Minimum frequency index to use
+    max_freq: int
+        One beyond the maximum frequency index to use
+    eps_add: float
+        Maximum amount of additive perturbation allowed at each frequency bin
+    eps_ratio: float
+        Maximum amount of ratio perturbation allowed at each frequency bin
+    Mag_fixed: ndarray(n_freq, M)
+        Magnitude coefficients to hold fixed, starting from the beginning
+    Returns
+    -------
+    dict(
+        Mag: ndarray(n_freq, N)
+            The modified magnitude spectrogram,
+        cent: ndarray(N)
+            The computed original spectral centroids in the range [min_freq, max_freq)
+    )
+    """
+    MagRet = np.zeros_like(Mag)
+    MagLast = np.array([])
+    i = 0
+    NWin = Mag.shape[1] // (block_win-win+1)
+    idx = 1
+    while i+block_win <= Mag.shape[1]:
+        print("Doing window {} of {}...".format(idx, NWin))
+        Mag_fixed = np.array([])
+        if MagLast.size > 0:
+            Mag_fixed = MagLast[:, -(win-1)::]
+        res = windowed_spec_centroid_perturb(Mag[:, i:i+block_win], target[i:i+block_win-win+1],
+                                             win, min_freq, max_freq, eps_add, eps_ratio, Mag_fixed)
+        MagRet[:, i:i+block_win] = res['Mag']
+        i += block_win-win+1
+        idx += 1
+    return MagRet
 
 
 def spec_centroid(Mag, f1, f2, win):
