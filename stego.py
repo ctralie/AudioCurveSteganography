@@ -170,12 +170,12 @@ def get_windowed_spec_centroid_matrices(Mag, min_freq, max_freq, win):
     return An, Ad
 
 
-def get_normalized_target(cent_orig, target, min_freq, max_freq, stdev=2):
+def get_normalized_target(x, target, min_freq=1, max_freq=2, stdev=2):
     """
     Normalize the target to the range of the centroid
 
-    cent_orig: ndarray(N)
-        Original centroid
+    x: ndarray(N)
+        Original Signal
     target: ndarray(T >= N)
         Target signal
     min_freq: int
@@ -185,8 +185,8 @@ def get_normalized_target(cent_orig, target, min_freq, max_freq, stdev=2):
     stdev: float
         How many standard deviations to fit
     """
-    xrg = stdev*np.std(cent_orig)
-    xmu = np.mean(cent_orig)
+    xrg = stdev*np.std(x)
+    xmu = np.mean(x)
     xmin = max(min_freq, xmu-xrg)
     xmax = min(max_freq, xmu+xrg)
     target -= np.min(target)
@@ -252,7 +252,6 @@ def get_best_target(X, Y, K):
     K: int
         Maximum jump interval between states
     """
-    K = 10 # Can jump by up to this number of points
     costfn = lambda Z: np.sum(np.abs(Z-Y))
 
     min_path = np.arange(Y.shape[0]) % X.shape[0]

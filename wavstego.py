@@ -1,11 +1,13 @@
+from tkinter import LabelFrame
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.sparse.linalg import LinearOperator
 from scipy.optimize import lsq_linear
 from pywt import wavedec, waverec, dwt, idwt
+from stego import *
 
 
-class SlidingWindowMatrix(LinearOperator):
+class SlidingWindowCentroidMatrix(LinearOperator):
     """
     Perform the effect of a sliding window average between two
     parallel arrays
@@ -100,3 +102,156 @@ def subdivide_wavelet_rec(coeffs, wavtype):
         cA = subdivide_wavelet_rec(coeffs[0:N], wavtype)
         cD = subdivide_wavelet_rec(coeffs[N:], wavtype)
     return idwt(cA, cD, wavtype)
+
+
+class WaveletCoeffs:
+    def __init__(self, x, target, win, lam=1, k=2, viterbi_K=4, wavtype='haar', wavlevel=4):
+        """
+        Parameters
+        ----------
+        x: ndarray(N pow of 2)
+            Audio samples
+        target: ndarray(M, 2)
+            Target curve
+        win: int
+            Window length to use
+        lam: float
+            The weight to put on fit to sliding window sum
+        k: int
+            Index of first wavelet to split up
+        viterbi_K: int
+            Maximum jump allowed during re-parameterization
+        wavtype: string
+            Type of wavelet to use
+        wavlevel: int
+            Level of wavelets to go down to
+        
+        """
+        ## Step 1: Compute wavelets at all levels
+        coeffs = wavedec(x, wavtype, level=wavlevel)
+        coeffs = [[c] for c in coeffs[::-1]]
+        self.coeffs = coeffs
+        self.k = k
+        self.wavtype = wavtype
+        
+        divamt = 1+int(np.round(np.log2(coeffs[k][0].size/(target.shape[0]+win))))
+        coeffs[k] = subdivide_wavlevel_dec(coeffs[k][0], divamt, wavtype)
+        coeffs[k+1] = subdivide_wavlevel_dec(coeffs[k+1][0], divamt-1, wavtype)
+        print("coeffs size", coeffs[k][0].size)
+        
+        ## Step 2: Setup all aspects of sliding windows
+        self.signs = [np.sign(x) for x in coeffs[k] + coeffs[k+1]] # Signs of wavelet coefficients before squaring
+        self.pairs_sqr = [p**2 for p in coeffs[k] + coeffs[k+1]] # Squared wavelet coefficients
+        self.mats = [] # Matrices to do sliding window averaging transforms on each pair
+        self.targets = [] # Normalized target time series for each pair
+        self.coords = [] # Coordinates of each pair
+        csm = np.array([]) # Cross-similarity matrix for aligned targets
+        for i in range(0, len(self.signs), 2):
+            Y = np.array([self.pairs_sqr[i], self.pairs_sqr[i+1]])
+            Mat = SlidingWindowCentroidMatrix(Y, win, lam)
+            self.mats.append(Mat)
+            res = Mat.dot(Y.flatten())
+            res = res[res.size//2::]
+            targeti = []
+            if i < len(self.signs)//2:
+                # First half of pairs are the x coordinate
+                targeti = np.array(target[:, 0])
+                self.coords.append(0)
+            else:
+                # Second half of pairs are the y coordinate
+                targeti = np.array(target[:, 1])
+                self.coords.append(1)
+            targeti = get_normalized_target(res, targeti, 1, 2)
+            self.targets.append(targeti)
+            csmi = np.abs(targeti[:, None] - res[None, :])
+            if csm.size == 0:
+                csm = csmi
+            else:
+                csm += csmi
+        self.csm = csm
+        self.coords = np.array(self.coords, dtype=int)
+
+        ## Step 3: Re-parameterize targets
+        path1 = viterbi_loop_trace(csm, viterbi_K)
+        cost1 = np.sum(csm[path1, np.arange(csm.shape[1])])
+        path = path1
+        path2 = viterbi_loop_trace(csm[:, ::-1], viterbi_K)
+        path2.reverse()
+        cost2 = np.sum(csm[path2, np.arange(csm.shape[1])])
+        if cost2 < cost1:
+            path = path2
+        self.targets = [t[path] for t in self.targets]
+        
+
+    def get_normalized_avg(self, Xs):
+        """
+        Z-normalize each of the Xs and average
+
+        Parameters
+        ----------
+        Xs: list of ndarray(N)
+
+        Returns
+        -------
+        averaged
+        """
+        X = np.zeros_like(Xs[0])
+        for Xi in Xs:
+            X += (Xi-np.mean(Xi))/np.std(Xi)
+        return X / len(Xs)
+
+    def get_normalized_target_avg(self):
+        """
+        Compute the averaged of the z-normalized target components
+
+        Returns
+        -------
+        ndarray(M, 2)
+            The normalized target
+        """
+        M = self.targets[0].size
+        Y = np.zeros((M, 2))
+        for k in range(2):
+            Y[:, k] = self.get_normalized_avg([t for i, t in zip(self.coords, self.targets) if i == k])
+        return Y
+    
+    def get_normalized_signal_avg(self):
+        """
+        Compute the z-normalized average of the sliding window centroids
+
+        Returns
+        -------
+        ndarray(M, 2)
+            Average of the z-normalized sliding window centroids
+        """
+
+        k = len(np.unique(self.coords))
+        M = self.targets[0].size
+        X = np.zeros((M, k))
+        counts = np.zeros(k)
+        for i in range(0, len(self.pairs_sqr), 2):
+            Y = np.array([self.pairs_sqr[i], self.pairs_sqr[i+1]])
+            Mat = self.mats[i//2]
+            res = Mat.dot(Y.flatten())
+            res = res[res.size//2::]
+            k = self.coords[i//2]
+            X[:, k] += (res-np.mean(res))/np.std(res)
+            counts[k] += 1
+        return X/counts[None, :]
+
+
+    
+    def reconstruct_signal(self):
+        """
+        Return the 1D time series after inverting all wavelet transforms
+        """
+        coeffs = self.coeffs.copy()
+        coeffs_new = []
+        for s, p in zip(self.signs, self.pairs_sqr):
+            p[p < 0] = 0
+            coeffs_new.append(np.sqrt(p)*s)
+        coeffs1 = coeffs_new[0:len(self.coeffs[self.k])]
+        coeffs2 = coeffs_new[len(self.coeffs[self.k])::]
+        coeffs[self.k] = [subdivide_wavelet_rec(coeffs1, self.wavtype)]
+        coeffs[self.k+1] = [subdivide_wavelet_rec(coeffs2, self.wavtype)]
+        return waverec([c[0] for c in coeffs[::-1]], self.wavtype)
