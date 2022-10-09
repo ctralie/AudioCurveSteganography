@@ -5,6 +5,7 @@ from scipy.sparse.linalg import LinearOperator
 from scipy.optimize import lsq_linear
 from pywt import wavedec, waverec, dwt, idwt
 from stego import *
+import time
 
 
 class SlidingWindowCentroidMatrix(LinearOperator):
@@ -133,6 +134,8 @@ class WaveletCoeffs:
         self.coeffs = coeffs
         self.k = k
         self.wavtype = wavtype
+        self.win = win
+        self.lam = lam
         
         divamt = 1+int(np.round(np.log2(coeffs[k][0].size/(target.shape[0]+win))))
         coeffs[k] = subdivide_wavlevel_dec(coeffs[k][0], divamt, wavtype)
@@ -182,14 +185,34 @@ class WaveletCoeffs:
             path = path2
         self.targets = [t[path] for t in self.targets]
         
-
-    def get_normalized_avg(self, Xs):
+    def solve(self):
         """
-        Z-normalize each of the Xs and average
+        Perform linear least squares to perturb the wavelet coefficients
+        to best match their targets
+        """
+        M = len(self.targets[0])
+        for i in range(0, len(self.targets)):
+            tic = time.time()
+            print("Computing target {} of {}...\n".format(i+1, len(self.targets)))
+            y = 1.5*self.lam*np.ones(M*2)
+            y[M::] = self.targets[i]
+            mx = 1.1*max(np.max(self.pairs_sqr[i*2]), np.max(self.pairs_sqr[i*2+1]))
+            res = lsq_linear(self.mats[i], y, (0, mx))
+            self.pairs_sqr[i*2] = res[0:res.size//2]
+            self.pairs_sqr[i*2+1] = res[res.size//2::]
+            print("Elapsed time: {:.3f}".format(time.time()-tic))
+
+
+    def get_avg(self, Xs, normalize=False):
+        """
+        Return the average of elements in an array
 
         Parameters
         ----------
         Xs: list of ndarray(N)
+            Arrays to average
+        normalize: bool
+            Whether to z-normalize each array
 
         Returns
         -------
@@ -197,10 +220,12 @@ class WaveletCoeffs:
         """
         X = np.zeros_like(Xs[0])
         for Xi in Xs:
-            X += (Xi-np.mean(Xi))/np.std(Xi)
+            if normalize:
+                Xi = (Xi-np.mean(Xi))/np.std(Xi)
+            X += Xi
         return X / len(Xs)
 
-    def get_normalized_target_avg(self):
+    def get_target_avg(self, normalize=False):
         """
         Compute the averaged of the z-normalized target components
 
@@ -212,17 +237,17 @@ class WaveletCoeffs:
         M = self.targets[0].size
         Y = np.zeros((M, 2))
         for k in range(2):
-            Y[:, k] = self.get_normalized_avg([t for i, t in zip(self.coords, self.targets) if i == k])
+            Y[:, k] = self.get_avg([t for i, t in zip(self.coords, self.targets) if i == k], normalize)
         return Y
     
-    def get_normalized_signal_avg(self):
+    def get_signal_avg(self, normalize=False):
         """
-        Compute the z-normalized average of the sliding window centroids
+        Compute the average of the sliding window centroids
 
         Returns
         -------
         ndarray(M, 2)
-            Average of the z-normalized sliding window centroids
+            Average of the sliding window centroids
         """
 
         k = len(np.unique(self.coords))
@@ -235,11 +260,11 @@ class WaveletCoeffs:
             res = Mat.dot(Y.flatten())
             res = res[res.size//2::]
             k = self.coords[i//2]
-            X[:, k] += (res-np.mean(res))/np.std(res)
+            if normalize:
+                res = (res-np.mean(res))/np.std(res)
+            X[:, k] += res
             counts[k] += 1
         return X/counts[None, :]
-
-
     
     def reconstruct_signal(self):
         """
@@ -255,3 +280,23 @@ class WaveletCoeffs:
         coeffs[self.k] = [subdivide_wavelet_rec(coeffs1, self.wavtype)]
         coeffs[self.k+1] = [subdivide_wavelet_rec(coeffs2, self.wavtype)]
         return waverec([c[0] for c in coeffs[::-1]], self.wavtype)
+    
+    def plot(self, normalize=False):
+        Y = self.get_target_avg(normalize)
+        Z = self.get_signal_avg(normalize)
+        plt.figure(figsize=(12, 8))
+        plt.subplot(211)
+        plt.plot(Y[:, 0])
+        plt.plot(Z[:, 0])
+        plt.title("X Coordinate")
+        plt.legend(["Target", "Signal"])
+        plt.subplot(212)
+        plt.plot(Y[:, 1])
+        plt.plot(Z[:, 1])
+        plt.title("Y Coordinate")
+        plt.legend(["Target", "Signal"])
+
+        plt.figure(figsize=(6, 6))
+        plt.plot(Y[:, 0], Y[:, 1])
+        plt.plot(Z[:, 0], Z[:, 1])
+        plt.axis("equal")
