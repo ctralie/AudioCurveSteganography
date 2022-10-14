@@ -191,7 +191,7 @@ def get_normalized_target(x, target, min_freq=1, max_freq=2, stdev=2):
     xmax = min(max_freq, xmu+xrg)
     target -= np.min(target)
     target /= np.max(target)
-    return xmin + target*(xmax-xmin)
+    return xmin + target*(xmax-xmin) + stdev*np.std(x)
 
 
 @jit(nopython=True)
