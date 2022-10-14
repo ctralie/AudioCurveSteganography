@@ -209,7 +209,7 @@ class WaveletCoeffs:
             y[M:M*2] = self.targets[coord]
             y[2*M::] = self.fit_lam*Y
 
-            res = lsq_linear(self.mats[coord], y, verbose=2)['x']
+            res = lsq_linear(self.mats[coord], y, (0, np.inf), verbose=2)['x']
             """
             x = cp.Variable(self.pairs_sqr[0].size)
             objective = cp.Minimize(cp.sum_squares(self.mats[i] @ x - y))
