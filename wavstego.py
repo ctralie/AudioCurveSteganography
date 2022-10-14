@@ -13,25 +13,29 @@ class SlidingWindowCentroidMatrix(LinearOperator):
     Perform the effect of a sliding window average between two
     parallel arrays
     """
-    def __init__(self, x_orig, win, denom_lam=1):
+    def __init__(self, x_orig, win, denom_lam=1, fit_lam=1):
         """
         Parameters
         ----------
-        x_orig: ndarray(K, N)
+        x_orig: ndarray(2K, N)
             Two sets of signals between which to compute the average
         win: int
             Window length to use
         denom_lam: float
             The weight to put on the denominator
+        fit_lam: float
+            The weight to put on the fit term
         """
         K = x_orig.shape[0]
         N = x_orig.shape[1]
         M = N-win+1
         self.K = K
         self.N = N
-        self.shape = ((2*M, K*N))
+        self.M = M
+        self.shape = ((2*M+K*N, K*N))
         self.win = win
         self.denom_lam = denom_lam
+        self.fit_lam = fit_lam
         self.dtype = float
         x_orig = np.sum(x_orig, axis=0)
         x_orig = np.concatenate(([0], x_orig))
@@ -39,6 +43,9 @@ class SlidingWindowCentroidMatrix(LinearOperator):
         self.denom = x_orig[win::]-x_orig[0:-win]
         self.mul_calls = 0
         self.rmul_calls = 0
+        # Pre-allocated matrices that are used to help with cumulative sums
+        self.xi = np.zeros((K, N+1))
+        self.p = np.zeros(M+2*win-1)
             
     
     def _matvec(self, x_param):
@@ -49,40 +56,37 @@ class SlidingWindowCentroidMatrix(LinearOperator):
         K = self.K
         self.mul_calls += 1
         self.rmul_calls += 1
-        x = np.zeros((K, x_param.size//K + 1))
-        x[:, 1::] = np.reshape(x_param, (K, x_param.size//K))
-        y1 = np.sum(x, axis=0)
+        self.xi[:, 1::] = np.reshape(x_param, (K, x_param.size//K))
+        y1 = np.sum(self.xi, axis=0)
         y1 = np.cumsum(y1)
         y1 = y1[self.win::]-y1[0:-self.win]
         y1 = 1.5*self.denom_lam*y1/self.denom
-        mul = np.ones((K, 1))
-        mul[K//2::] = 2
-        x2 = np.sum(x*mul, axis=0)
+        x2 = np.sum(self.xi[K//2::, :], axis=0)
         y2 = np.cumsum(x2)
         y2 = y2[self.win::]-y2[0:-self.win]
         y2 = y2/self.denom
-        return np.concatenate((y1, y2))
+        return np.concatenate((y1, y2, self.fit_lam*x_param.flatten()))
     
     def get_sliding_window_contrib(self, y, fac):
         """
         A helper function for the transpose
         """
-        p = np.zeros(y.size+2*self.win-1)
-        p[self.win:self.win+y.size] = y*fac
-        p = np.cumsum(p)
+        self.p[self.win:self.win+y.size] = y*fac
+        p = np.cumsum(self.p)
         return p[self.win::] - p[0:-self.win]
+        
     
     def _rmatvec(self, y):
         K = self.K
         N = self.N
-        y1 = y[0:y.size//2]
-        y2 = y[y.size//2::]
+        M = self.M
+        y1 = y[0:self.M]
+        y2 = y[self.M:self.M*2]
         x = np.zeros((K, N))
         p1 = self.get_sliding_window_contrib(y1, 1.5*self.denom_lam/self.denom)
         x += p1[None, :]
-        x[0::K//2, :] += self.get_sliding_window_contrib(y2, 1/self.denom)[None, :]
-        x[K//2::, :] += self.get_sliding_window_contrib(y2, 2/self.denom)[None, :]
-        return x.flatten()
+        x[K//2::, :] += self.get_sliding_window_contrib(y2, 1/self.denom)[None, :]
+        return x.flatten() + self.fit_lam*y[2*M::]
 
 
 def subdivide_wavlevel_dec(x, max_depth, wavtype, depth=1):
@@ -108,7 +112,7 @@ def subdivide_wavelet_rec(coeffs, wavtype):
 
 
 class WaveletCoeffs:
-    def __init__(self, x, target, win, fit_var=0.5, denom_lam=1, k=2, viterbi_K=4, wavtype='haar', wavlevel=4):
+    def __init__(self, x, target, win, fit_lam=1, denom_lam=1, k=2, viterbi_K=4, wavtype='haar', wavlevel=4):
         """
         Parameters
         ----------
@@ -118,9 +122,8 @@ class WaveletCoeffs:
             Target curve
         win: int
             Window length to use
-        fit_var: float
-            A variance proportion of the fit.  0 means very little variance, 1 means
-            the maximum variance
+        fit_lam: float
+            Weight to put into the fit
         denom_lam: float
             The weight to put on fit to sliding window sum
         k: int
@@ -141,8 +144,8 @@ class WaveletCoeffs:
         self.dim = target.shape[1]
         self.wavtype = wavtype
         self.win = win
-        self.fit_var = fit_var
         self.denom_lam = denom_lam
+        self.fit_lam = fit_lam
         
         divamt = 1+int(np.round(np.log2(coeffs[k][0].size/(target.shape[0]+win))))
         coeffs[k] = subdivide_wavlevel_dec(coeffs[k][0], divamt, wavtype)
@@ -161,13 +164,14 @@ class WaveletCoeffs:
         for coord in range(self.dim):
             self.coords += [coord]*K
             Y = np.array(self.pairs_sqr[coord*K:(coord+1)*K])
-            Mat = SlidingWindowCentroidMatrix(Y, win, denom_lam)
+            M = Y.shape[1]-win+1
+            Mat = SlidingWindowCentroidMatrix(Y, win, denom_lam, fit_lam)
             self.mats.append(Mat)
             res = Mat.dot(Y.flatten())
-            res = res[res.size//2::]
+            res = res[M:M*2]
             targeti = []
             targeti = np.array(target[:, coord])
-            targeti = get_normalized_target(res, targeti, 1, 2)
+            targeti = get_normalized_target(res, targeti, 0, 1)
             self.targets.append(targeti)
             csmi = np.abs(targeti[:, None] - res[None, :])
             if csm.size == 0:
@@ -193,21 +197,19 @@ class WaveletCoeffs:
         Perform linear least squares to perturb the wavelet coefficients
         to best match their targets
         """
-        M = len(self.targets[0])
+        M = self.targets[0].size
         K = len(self.pairs_sqr)//self.dim
         for coord in range(self.dim):
             tic = time.time()
             print("Computing target coordinate {} of {}...\n".format(coord+1, self.dim))
-            y = 1.5*self.denom_lam*np.ones(M*2)
-            y[M::] = self.targets[coord]
-
             Y = np.array(self.pairs_sqr[coord*K:(coord+1)*K])
             shape = Y.shape
             Y = Y.flatten()
-            eps_add = np.quantile(Y, self.fit_var)
-            mn = np.maximum(0, Y-eps_add)
-            mx = Y+eps_add
-            res = lsq_linear(self.mats[coord], y, (mn, mx), verbose=2)['x']
+            y = 1.5*self.denom_lam*np.ones(M*2+Y.size)
+            y[M:M*2] = self.targets[coord]
+            y[2*M::] = self.fit_lam*Y
+
+            res = lsq_linear(self.mats[coord], y, verbose=2)['x']
             """
             x = cp.Variable(self.pairs_sqr[0].size)
             objective = cp.Minimize(cp.sum_squares(self.mats[i] @ x - y))
@@ -260,7 +262,7 @@ class WaveletCoeffs:
             Mat = SlidingWindowCentroidMatrix(Y, self.win, self.denom_lam)
             self.mats.append(Mat)
             res = Mat.dot(Y.flatten())
-            x = res[res.size//2::]
+            x = res[M:M*2]
             if normalize:
                 x = (x-np.mean(x))/np.std(x)
             X[:, coord] = x
@@ -277,7 +279,10 @@ class WaveletCoeffs:
             plt.plot(Z[:, k])
             plt.legend(["Target", "Signal"])
 
-        plt.figure(figsize=(6, 6))
+        plt.figure(figsize=(12, 4))
+        plt.subplot(121)
+        plt.plot(Z[:, 0], Z[:, 1], c='C1')
+        plt.subplot(122)
         plt.plot(Y[:, 0], Y[:, 1])
         plt.plot(Z[:, 0], Z[:, 1])
         plt.axis("equal")
