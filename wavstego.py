@@ -272,17 +272,16 @@ class WaveletCoeffs:
         Y = self.get_target(normalize)
         Z = self.get_signal(normalize)
         res = 4
-        plt.figure(figsize=(res*3, res*self.dim))
+        plt.figure(figsize=(res*3, res*(self.dim+1)))
         for k in range(self.dim):
-            plt.subplot(self.dim, 1, k+1)
+            plt.subplot2grid((self.dim+1, 2), (k, 0), colspan=2)
             plt.plot(Y[:, k])
             plt.plot(Z[:, k])
             plt.legend(["Target", "Signal"])
 
-        plt.figure(figsize=(12, 4))
-        plt.subplot(121)
+        plt.subplot2grid((self.dim+1, 2), (self.dim, 0))
         plt.plot(Z[:, 0], Z[:, 1], c='C1')
-        plt.subplot(122)
+        plt.subplot2grid((self.dim+1, 2), (self.dim, 1))
         plt.plot(Y[:, 0], Y[:, 1])
         plt.plot(Z[:, 0], Z[:, 1])
         plt.axis("equal")
