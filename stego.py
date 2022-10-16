@@ -1,12 +1,20 @@
 from curses import A_COLOR
 import numpy as np
 import matplotlib.pyplot as plt
-import cvxpy as cp
 import time
 from numba import jit
 from scipy import sparse
 from scipy.sparse import linalg as slinalg
 from scipy.signal import medfilt
+
+def get_snr(x, y):
+    """
+    Compute the SNR in dB
+    """
+    power_sig = x**2
+    power_noise = (y-x)**2
+    snr = np.log10(np.mean(power_sig)) - np.log10(np.mean(power_noise))
+    return 10*snr
 
 
 def get_window_energy(x, win, hop=1):
@@ -56,6 +64,7 @@ def energy_perturb(x, target, win, hop, lam):
             The target signal, normalized to the range of cent
     )
     """
+    import cvxpy as cp
     N = x.size
     T = target.size
     assert(T <= 1+(N-win)//hop)
@@ -191,7 +200,7 @@ def get_normalized_target(x, target, min_freq=1, max_freq=2, stdev=2):
     xmax = min(max_freq, xmu+xrg)
     target -= np.min(target)
     target /= np.max(target)
-    return xmin + target*(xmax-xmin) + stdev*np.std(x)
+    return xmin + target*(xmax-xmin)
 
 
 @jit(nopython=True)
@@ -319,6 +328,7 @@ def windowed_spec_centroid_perturb(Mag, target, win, min_freq, max_freq, eps_add
     ## Step 1: Setup sparse optimization problem for perturbing the magnitude 
     ## spectrogram values so that the distance between the target and the 
     ## windowed spectral centroid is minimized in a least squared sense
+    import cvxpy as cp
     M = max_freq - min_freq
     N = Mag.shape[1]
     assert(target.size == N-win+1)
