@@ -2,6 +2,7 @@
 General steganography utility functions
 """
 import numpy as np
+import matplotlib.pyplot as plt
 from numba import jit
 from scipy.sparse.linalg import LinearOperator
 
@@ -235,3 +236,142 @@ def get_maxes(S, max_freq, time_win, freq_win):
             if constraint:
                 ret.append([i, j])
     return ret
+
+
+class StegoSolver:
+    def __init__(self, x, target):
+        """
+        Parameters
+        ----------
+        x: ndarray(N pow of 2)
+            Audio samples
+        target: ndarray(M, dim)
+            Target curve
+        """
+        self.x_orig = np.array(x)
+        self.target_orig = np.array(target)
+        ## Step 1: Compute wavelets at all levels
+        self.dim = target.shape[1]
+        self.targets = [] # Normalized target time series for each coordinate (dim total)
+
+
+    def reparam_targets(self, csm):
+        """
+        Re-parameterize a bunch of targets to fit 
+
+        Parameters
+        ----------
+        csm: ndarray(target_len, signal_len)
+            Cross-similarity matrix between targets and signals
+        """
+        target_len = self.target_orig.shape[0]
+        viterbi_K = 1
+        finished = False
+        path = []
+        while not finished and viterbi_K < 10:
+            pathk = viterbi_loop_trace(csm, viterbi_K)
+            cost1 = np.sum(csm[pathk, np.arange(csm.shape[1])])
+            path2 = viterbi_loop_trace(csm[:, ::-1], viterbi_K)
+            path2.reverse()
+            cost2 = np.sum(csm[path2, np.arange(csm.shape[1])])
+            if cost2 < cost1:
+                pathk = path2
+            path_unwrap = np.unwrap(pathk, period=target_len)
+            if np.abs(path_unwrap[0]-path_unwrap[-1]) >= target_len:
+                finished = True
+                path = pathk
+            else:
+                viterbi_K += 1
+        self.targets = [t[path] for t in self.targets]
+        
+    def solve(self):
+        """
+        Perform linear least squares to perturb the wavelet coefficients
+        to best match their targets
+        """
+        print("Error: calling solve on parent class")
+    
+    def reconstruct_signal(self):
+        """
+        Return the 1D time series after inverting all perturbed transforms
+        """
+        print("Error: calling reconstruct_signal on parent class")
+        return np.array([])
+
+    def get_target(self, normalize=False):
+        """
+        Return the targets
+
+        Parameters
+        ----------
+        normalize: boolean
+            Whether to z-normalize each component
+        
+        Returns
+        -------
+        ndarray(N, k)
+            Target components
+        """
+        ret = np.array(self.targets).T
+        if normalize:
+            ret = (ret - np.mean(ret, axis=0)[None, :])
+            ret = ret/np.std(ret, axis=0)[None, :]
+        return ret
+    
+    def get_signal(self, normalize=False):
+        print("Error: calling get_signal on parent class")
+        return np.array([])
+
+    def plot(self, normalize=False):
+        Y = self.get_target(normalize)
+        Z = self.get_signal(normalize)
+        res = 4
+        plt.figure(figsize=(res*3, res*(self.dim+2)))
+        for k in range(self.dim):
+            plt.subplot2grid((self.dim*2, 2), (k, 0), colspan=2)
+            plt.plot(Y[:, k])
+            plt.plot(Z[:, k])
+            plt.legend(["Target", "Signal"])
+            plt.subplot2grid((self.dim*2, 2), (self.dim, k))
+            plt.scatter(Y[:, k], Z[:, k], c=np.arange(Y.shape[0]), cmap='magma_r')
+            plt.xlabel("Target")
+            plt.ylabel("Signal")
+        plt.subplot2grid((self.dim*2, 2), (self.dim+1, 0))
+        plt.plot(Y[:, 0], Y[:, 1])
+        plt.title("Target")
+        plt.axis("equal")
+        plt.subplot2grid((self.dim*2, 2), (self.dim+1, 1))
+        plt.plot(Z[:, 0], Z[:, 1])
+        mean, mx = self.get_distortion()
+        L = Z[1::, :]-Z[0:-1, :]
+        L = np.sqrt(np.sum(L**2, axis=1))
+        L = np.sum(L)
+        plt.title("Reconstructed (Mean Distortion = {:.3f}, Max Distortion = {:.3f})\nLength = {:.3f}".format(mean, mx, L))
+        plt.axis("equal")
+        plt.tight_layout()
+    
+    def get_distortion(self):
+        """
+        Compute the average and max geometric distortion between the original 
+        target and the computed signal
+        """
+        Y = self.get_target(normalize=True)
+        Z = self.get_signal(normalize=True)
+        diff = np.sum((Y-Z)**2, axis=1)
+        diff = np.sqrt(diff)
+        return np.mean(diff), np.max(diff)
+
+
+        """
+        from scipy.spatial import KDTree
+        Y = np.array(self.target_orig)
+        Y -= np.mean(Y, axis=0)[None, :]
+        Y /= np.std(Y, axis=0)[None, :]
+        Z = self.get_signal(normalize=True)
+        treeY = KDTree(Y)
+        treeZ = KDTree(Z)
+        dd1, _ = treeY.query(Z, k=1)
+        dd2, _ = treeZ.query(Y, k=1)
+        dd = np.concatenate((dd1.flatten(), dd2.flatten()))
+        return np.mean(dd), np.max(dd)
+        """
