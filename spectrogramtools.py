@@ -1,7 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy.spatial import KDTree
-from numba import jit
 
 hann = lambda win: 0.5*(1-np.cos(2*np.pi*np.arange(win)/win))
 
@@ -62,27 +59,6 @@ def isdct(S, hop, winfn=hann):
     for i in range(S.shape[1]):
         X[i*hop:i*hop+win] += h*idct(S[:, i])
     return X
-
-@jit(nopython=True)
-def get_maxes(S, max_freq, time_win, freq_win):
-    ret = []
-    M, N = S.shape
-    for i in range(max_freq):
-        for j in range(N):
-            constraint = True
-            ni = max(0, i-freq_win)
-            while constraint and ni < min(max_freq, i+freq_win+1):
-                nj = max(0, j-time_win)
-                while constraint and nj < min(N, j+time_win+1):
-                    if ni != i or nj != j:
-                        if S[ni, nj] > S[i, j]:
-                            constraint = False
-                    nj += 1
-                ni += 1
-            if constraint:
-                ret.append([i, j])
-    return ret
-
 
 
 halfsine = lambda W: np.sin(np.pi*np.arange(W)/float(W))
@@ -207,61 +183,3 @@ def change_phases(PhasesOrig, I, X):
             Phases[i, j] = g2
     return Phases
 
-
-def make_voronoi_image(coords, phases):
-    phases = np.abs(phases)
-    i1, j1 = np.min(coords, axis=0)
-    i2, j2 = np.max(coords, axis=0)
-    I, J = np.meshgrid(np.arange(i1, i2+1), np.arange(j1, j2+1), indexing='ij')
-    shape = I.shape
-    I = I.flatten()
-    J = J.flatten()
-    tree = KDTree(coords)
-    _, idx = tree.query(np.array([I, J]).T)
-    return np.reshape(phases[idx], shape)
-
-
-def getNSGT(X, Fs, resol=24):
-    """
-    Perform a Nonstationary Gabor Transform implementation of CQT
-    :param X: A 1D array of audio samples
-    :param Fs: Sample rate
-    :param resol: Number of CQT bins per octave
-    """
-    from nsgt import NSGT,OctScale
-    scl = OctScale(50, Fs, resol)
-    nsgt = NSGT(scl, Fs, len(X), matrixform=True)
-    C = nsgt.forward(X)
-    return np.array(C)
-
-def getiNSGT(C, L, Fs, resol=24):
-    """
-    Perform an inverse Nonstationary Gabor Transform
-    :param C: An NBinsxNFrames CQT array
-    :param L: Number of samples in audio file
-    :param Fs: Sample rate
-    :param resol: Number of CQT bins per octave
-    """
-    from nsgt import NSGT,OctScale
-    scl = OctScale(50, Fs, resol)
-    nsgt = NSGT(scl, Fs, L, matrixform=True)
-    return nsgt.backward(C)
-
-def getiNSGTGriffinLim(C, L, Fs, resol=24, randPhase = False, NIters = 20):
-    from nsgt import NSGT,OctScale
-    scl = OctScale(50, Fs, resol)
-    nsgt = NSGT(scl, Fs, L, matrixform=True)
-    eps = 2.2204e-16
-    if randPhase:
-        C = np.exp(np.complex(0, 1)*np.random.rand(C.shape[0], C.shape[1]))*C
-    A = np.array(C, dtype = np.complex)
-    for i in range(NIters):
-        print("iNSGT Griffin Lim Iteration %i of %i"%(i+1, NIters))
-        Ai = np.array(nsgt.forward(nsgt.backward(C)))
-        A = np.zeros_like(C)
-        A[:, 0:Ai.shape[1]] = Ai
-        Norm = np.sqrt(A*np.conj(A))
-        Norm[Norm < eps] = 1
-        A = np.abs(C)*(A/Norm)
-    X = nsgt.backward(A)
-    return np.real(X)

@@ -44,7 +44,8 @@ def lognormal_wavelet(a, sigma, T, P, alpha):
     leftside[leftside < 0] = 0
 
     # Linear frequency index size (length of the longest wavelet)
-    D = 2**nextpow2(np.max(calculate_index[1, :] - calculate_index[0, :])) 
+    mx = np.max(calculate_index[1, :] - calculate_index[0, :])
+    D = 2**nextpow2(mx) 
     D = int(D)
     calculate_omega = np.array(leftside[:, None] + np.arange(D)[None, :], dtype=float)
     calculate_omega *= delta_rad # Radians (K x D)
@@ -145,3 +146,17 @@ class cqt:
         n = spec.size//2
         spec[n+1::] = np.conj(spec[1:n][::-1])
         return np.fft.ifft(spec)
+    
+    def griffin_lim(self, S, n_iters=20):
+        """
+        Perform Griffin-Lim phase retrieval on a magnitude
+        CQT-spectrogram S
+        """
+        A = np.array(S, dtype=complex)
+        A = A*np.exp(1j*2*np.pi*np.random.rand(A.shape[0], A.shape[1]))
+        for i in range(n_iters):
+            print(".", end='')
+            P = self.forward(np.real(self.inverse(A)))
+            angle = np.arctan2(np.imag(P), np.real(P))
+            A = S*np.exp(1j*angle)
+        return np.real(self.inverse(A))

@@ -1,68 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.sparse.linalg import LinearOperator
 from scipy.optimize import lsq_linear
 from pywt import wavedec, waverec, dwt, idwt
-from scipy.spatial import KDTree
 from stego import *
 import time
-
-class SlidingWindowCentroidMatrix(LinearOperator):
-    """
-    Perform the effect of a sliding window average between two
-    parallel arrays
-    """
-    def __init__(self, N, win, fit_lam=1):
-        """
-        Parameters
-        ----------
-        N: int
-            Length of signal to embed
-        win: int
-            Window length to use
-        fit_lam: float
-            The weight to put on the fit term
-        """
-        M = N-win+1
-        self.N = N
-        self.M = M
-        self.shape = ((M+N, N))
-        self.win = win
-        self.fit_lam = fit_lam
-        self.dtype = float
-        self.mul_calls = 0
-        self.rmul_calls = 0
-        # Pre-allocated matrices that are used to help with cumulative sums
-        self.xi = np.zeros(N+1)
-        self.p = np.zeros(M+2*win-1)
-    
-    def _matvec(self, x_param):
-        """
-        y1 holds sliding window sum
-        y2 holds weighted sliding window sum
-        """
-        self.mul_calls += 1
-        self.rmul_calls += 1
-        self.xi[1::] = x_param
-        y1 = np.cumsum(self.xi)
-        y1 = y1[self.win::]-y1[0:-self.win]
-        return np.concatenate((y1, self.fit_lam*x_param.flatten()))
-    
-    def get_sliding_window_contrib(self, y, fac):
-        """
-        A helper function for the transpose
-        """
-        self.p[self.win:self.win+y.size] = y*fac
-        p = np.cumsum(self.p)
-        return p[self.win::] - p[0:-self.win]
-    
-    def _rmatvec(self, y):
-        N = self.N
-        M = self.M
-        y1 = y[0:self.M]
-        x = np.zeros(N)
-        x += self.get_sliding_window_contrib(y1, 1)
-        return x.flatten() + self.fit_lam*y[M::]
 
 
 def subdivide_wavlevel_dec(x, max_depth, wavtype, depth=1):
@@ -87,7 +28,7 @@ def subdivide_wavelet_rec(coeffs, wavtype):
     return idwt(cA, cD, wavtype)
 
 class WaveletCoeffs:
-    def __init__(self, x, target, win, fit_lam=1, k=2, wavtype='haar', wavlevel=7, coefflevel=1):
+    def __init__(self, x, target, win, fit_lam=1, wavtype='haar', wavlevel=7, coefflevel=1):
         """
         Parameters
         ----------
@@ -131,7 +72,7 @@ class WaveletCoeffs:
             self.coords += [coord]*K
             Y = self.pairs_sqr[coord]
             M = Y.size-win+1
-            Mat = SlidingWindowCentroidMatrix(Y.size, win, fit_lam)
+            Mat = SlidingWindowSumMatrix(Y.size, win, fit_lam)
             self.mats.append(Mat)
             res = Mat.dot(Y)
             res = res[0:M]
@@ -221,7 +162,7 @@ class WaveletCoeffs:
         X = np.zeros((M, self.dim))
         for coord in range(self.dim):
             Y = self.pairs_sqr[coord]
-            Mat = SlidingWindowCentroidMatrix(Y.size, self.win, self.fit_lam)
+            Mat = SlidingWindowSumMatrix(Y.size, self.win, self.fit_lam)
             res = Mat.dot(Y)
             x = res[0:M]
             if normalize:
@@ -270,6 +211,7 @@ class WaveletCoeffs:
 
 
         """
+        from scipy.spatial import KDTree
         Y = np.array(self.target_orig)
         Y -= np.mean(Y, axis=0)[None, :]
         Y /= np.std(Y, axis=0)[None, :]

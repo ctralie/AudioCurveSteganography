@@ -1,11 +1,9 @@
-from curses import A_COLOR
+"""
+General steganography utility functions
+"""
 import numpy as np
-import matplotlib.pyplot as plt
-import time
 from numba import jit
-from scipy import sparse
-from scipy.sparse import linalg as slinalg
-from scipy.signal import medfilt
+from scipy.sparse.linalg import LinearOperator
 
 def get_snr(x, y):
     """
@@ -16,6 +14,61 @@ def get_snr(x, y):
     snr = np.log10(np.mean(power_sig)) - np.log10(np.mean(power_noise))
     return 10*snr
 
+class SlidingWindowSumMatrix(LinearOperator):
+    """
+    Perform the effect of a sliding window sum of an array
+    """
+    def __init__(self, N, win, fit_lam=1):
+        """
+        Parameters
+        ----------
+        N: int
+            Length of signal to embed
+        win: int
+            Window length to use
+        fit_lam: float
+            The weight to put on the fit term
+        """
+        M = N-win+1
+        self.N = N
+        self.M = M
+        self.shape = ((M+N, N))
+        self.win = win
+        self.fit_lam = fit_lam
+        self.dtype = float
+        self.mul_calls = 0
+        self.rmul_calls = 0
+        # Pre-allocated matrices that are used to help with cumulative sums
+        self.xi = np.zeros(N+1)
+        self.p = np.zeros(M+2*win-1)
+    
+    def _matvec(self, x_param):
+        """
+        y1 holds sliding window sum
+        y2 holds weighted sliding window sum
+        """
+        self.mul_calls += 1
+        self.rmul_calls += 1
+        self.xi[1::] = x_param
+        y1 = np.cumsum(self.xi)
+        y1 = y1[self.win::]-y1[0:-self.win]
+        return np.concatenate((y1, self.fit_lam*x_param.flatten()))
+    
+    def get_sliding_window_contrib(self, y, fac):
+        """
+        A helper function for the transpose
+        """
+        self.p[self.win:self.win+y.size] = y*fac
+        p = np.cumsum(self.p)
+        return p[self.win::] - p[0:-self.win]
+    
+    def _rmatvec(self, y):
+        N = self.N
+        M = self.M
+        y1 = y[0:self.M]
+        x = np.zeros(N)
+        x += self.get_sliding_window_contrib(y1, 1)
+        return x.flatten() + self.fit_lam*y[M::]
 
 def get_window_energy(x, win, hop=1):
     """
@@ -37,147 +90,6 @@ def get_window_energy(x, win, hop=1):
     """
     eng = np.cumsum(np.concatenate(([0], x**2)))
     return eng[win::hop]-eng[0:-win:hop]
-
-def energy_perturb(x, target, win, hop, lam):
-    """
-    Perturb the windowed energy of a signal to match a target.
-    Do an unconstrained least squares, trading off fit to original
-    signal and fit to target signal
-
-    Parameters
-    ----------
-    x: ndarray(N)
-        An array of samples
-    target: ndarray(T <= N-win+1)
-        Target signal
-    win: int
-        Length of sliding window
-    hop: int
-        Hop length between windows
-    lam: float
-        Weight of audio fidelity
-    
-    Returns
-    -------
-    dict(
-        target: ndarray(T)
-            The target signal, normalized to the range of cent
-    )
-    """
-    import cvxpy as cp
-    N = x.size
-    T = target.size
-    assert(T <= 1+(N-win)//hop)
-    NT = (T-1)*hop+win # Number of samples involved in the optimization (NT <= N)
-    
-
-    ## Step 1: Compute the windowed energy "wineng" and normalize the target signal 
-    ## into the range (mu(wineng)-std(wineng), mu(wineng)+std(wineng))
-    wineng =  get_window_energy(x, win, hop)[0:T]
-    target -= np.min(target)
-    target /= np.max(target)
-    target = np.mean(wineng) + (target-0.5)*2*np.std(wineng)
-
-    ## Step 2: Come up with system of linear equations
-    I1 = np.arange(NT)
-    I2 = NT + (np.arange(T)[:, None]*np.ones((1, win))).flatten()
-    I = np.concatenate((I1.flatten(), I2.flatten()))
-
-    J1 = np.arange(NT)
-    J2 = hop*np.arange(T)[:, None] + np.arange(win)[None, :]
-    J = np.concatenate((J1, J2.flatten()))
-    
-    V = np.ones(NT+T*win, dtype=int)
-    V[0:NT] = lam
-
-    A = sparse.coo_matrix((V, (I, J)), shape=(NT+T, NT))
-    A = A.tocsr()
-    b = np.concatenate((lam*x[0:NT]**2, target))
-    
-    ## Step 3: Solve system of equations
-    #"""
-    u = cp.Variable(NT)
-    u.value = x[0:NT]
-    objective = cp.Minimize(cp.sum_squares(A@u - b))
-    constraints = [u >= 0]
-    tic = time.time()
-    prob = cp.Problem(objective, constraints)
-    prob.solve(warm_start=True)
-    print("Elapsed time least squares: ", time.time()-tic)
-    u = u.value
-    ubefore = np.array(u)
-    u[u < 0] = 0
-    #"""
-
-    #from scipy.optimize import nnls
-    #tic = time.time()
-    #u = nnls(A.toarray(), b)[0]
-    #ubefore = np.array(u)
-    #print("Elapsed time nnls: ", time.time()-tic)
-
-    #from sgd import stochastic_gradient_descent
-    #u = stochastic_gradient_descent(b, A, x[0:T+win]**2, step_size=0.05, converge_on_r=0.1, non_neg=True)
-    #ubefore = np.array(u)
-    
-    xres = np.array(x)
-    xres[0:NT] = np.sign(x)[0:NT]*np.sqrt(u)
-    
-    return dict(target=target, wineng=wineng, x=xres, u=ubefore)
-
-
-def get_windowed_spec_centroid_matrices(Mag, min_freq, max_freq, win):
-    """
-    Get the sparse matrices to compute the numerator and the denominator
-    of the windowed spectral centroid
-
-    Parameters
-    ----------
-    Mag: ndarray(n_freq, N)
-        A magnitude spectrogram
-    min_freq: int
-        Minimum frequency index to use
-    max_freq: int
-        One beyond the maximum frequency index to use
-    win: int
-        Length of sliding window
-    
-    Returns
-    -------
-    An: sparse array(N-win+1, N*M)
-        Numerator matrix
-    Ad: sparse array(N-win+1, N*M)
-        Denominator matrix
-    Ac: sparse array(N, N*M)
-        Individual denominator matrix
-    """
-    N = Mag.shape[1]
-    M = max_freq-min_freq
-    
-    In = np.zeros((N-win+1)*M*win, dtype=int)
-    Jn = np.zeros_like(In)
-    Vn = np.zeros(In.size)
-    
-    Id = np.zeros_like(In)
-    Jd = np.zeros_like(Jn)
-    Vd = np.zeros_like(Vn)
-    
-    for i in range(N-win+1):
-        # Setup spectral numerator matrix
-        In[i*M*win:(i+1)*M*win] = i
-        Jn[i*M*win:(i+1)*M*win] = np.arange(i*M, (i+win)*M)
-        Vi = np.ones((win, 1))*np.arange(min_freq, max_freq)[None, :]
-        Vi = Vi/np.sum(Mag[min_freq:max_freq, i:i+win])
-        Vn[i*M*win:(i+1)*M*win] = Vi.flatten()
-        # Setup spectral centroid denominator matrix
-        Id[i*M*win:(i+1)*M*win] = i
-        Jd[i*M*win:(i+1)*M*win] = np.arange(i*M, (i+win)*M)
-        Vd[i*M*win:(i+1)*M*win] = np.ones(M*win)
-
-
-    An = sparse.coo_matrix((Vn, (In, Jn)), shape=(N-win+1, N*M))
-    Ad = sparse.coo_matrix((Vd, (Id, Jd)), shape=(N-win+1, N*M))
-    return An, Ad
-
 
 def get_normalized_target(x, target, min_freq=1, max_freq=2, stdev=2):
     """
@@ -201,7 +113,6 @@ def get_normalized_target(x, target, min_freq=1, max_freq=2, stdev=2):
     target -= np.min(target)
     target /= np.max(target)
     return xmin + target*(xmax-xmin)
-
 
 @jit(nopython=True)
 def viterbi_loop_trace(csm, K):
@@ -292,187 +203,35 @@ def get_best_target(X, Y, K):
 
     return min_path, min_cost
 
+def make_voronoi_image(coords, phases):
+    from scipy.spatial import KDTree
+    phases = np.abs(phases)
+    i1, j1 = np.min(coords, axis=0)
+    i2, j2 = np.max(coords, axis=0)
+    I, J = np.meshgrid(np.arange(i1, i2+1), np.arange(j1, j2+1), indexing='ij')
+    shape = I.shape
+    I = I.flatten()
+    J = J.flatten()
+    tree = KDTree(coords)
+    _, idx = tree.query(np.array([I, J]).T)
+    return np.reshape(phases[idx], shape)
 
-def windowed_spec_centroid_perturb(Mag, target, win, min_freq, max_freq, eps_add, eps_ratio=0, Mag_fixed=np.array([])):
-    """
-    Perturb a sliding window of the spectral centroid of a magnitude spectrogram within 
-    a particular frequency range to best match some target signal, up to a scale
-
-    Parameters
-    ----------
-    Mag: ndarray(n_freq, N)
-        A magnitude spectrogram
-    target: ndarray(N-win+1)
-        Target signal
-    win: int
-        Length of sliding window
-    min_freq: int
-        Minimum frequency index to use
-    max_freq: int
-        One beyond the maximum frequency index to use
-    eps_add: float
-        Maximum amount of additive perturbation allowed at each frequency bin
-    eps_ratio: float
-        Maximum amount of ratio perturbation allowed at each frequency bin
-    Mag_fixed: ndarray(n_freq, M)
-        Magnitude coefficients to hold fixed, starting from the beginning
-    Returns
-    -------
-    dict(
-        Mag: ndarray(n_freq, N)
-            The modified magnitude spectrogram,
-        cent: ndarray(N)
-            The computed original spectral centroids in the range [min_freq, max_freq)
-    )
-    """
-    ## Step 1: Setup sparse optimization problem for perturbing the magnitude 
-    ## spectrogram values so that the distance between the target and the 
-    ## windowed spectral centroid is minimized in a least squared sense
-    import cvxpy as cp
-    M = max_freq - min_freq
-    N = Mag.shape[1]
-    assert(target.size == N-win+1)
-    An, _ = get_windowed_spec_centroid_matrices(Mag, min_freq, max_freq, win)
-    _, Ad = get_windowed_spec_centroid_matrices(Mag, min_freq, max_freq, 1)
-    A = sparse.vstack([An, Ad])
-    A = A.tocsr()
-    print("Sparsity factor:", A.count_nonzero()/(A.shape[0]*A.shape[1]))
-
-    x_orig = (Mag[min_freq:max_freq, :].T).flatten()
-    b = np.concatenate((target.flatten(), Ad.dot(x_orig).flatten()))
-
-    ## Step 2: Solve the optimization problem and return a spectrogram
-    ## with the result
-    x = cp.Variable(N*M)
-    objective = cp.Minimize(cp.sum_squares(A@x - b))
-    xmin = x_orig - eps_add
-    xmax = x_orig + eps_add
-    if eps_ratio > 0:
-        xmin = np.minimum(xmin, x_orig*(1-eps_ratio))
-        xmax = np.maximum(xmax, x_orig*(1+eps_ratio))
-    xmin[xmin < 0] = 0
-    constraints = [xmin <= x, x <= xmax]
-    if Mag_fixed.size > 0:
-        m = (Mag_fixed[min_freq:max_freq, :].T).flatten()
-        constraints += [x[0:Mag_fixed.size] == m]
-    tic = time.time()
-    prob = cp.Problem(objective, constraints)
-    prob.solve()
-    print("Elapsed Time: ", time.time()-tic)
-    x = np.array(x.value)
-    MagRet = np.array(Mag)
-    MagRet[min_freq:max_freq, :] = np.reshape(x, (N, M)).T
-
-    x = (MagRet[min_freq:max_freq, :].T).flatten()
-    cent = An.dot(x)
-    return dict(Mag=MagRet, cent=cent)
-
-
-def block_windowed_spec_centroid_perturb(Mag, target, win, block_win, min_freq, max_freq, eps_add, eps_ratio=0):
-    """
-    Perturb a sliding window of the spectral centroid of a magnitude spectrogram within 
-    a particular frequency range to best match some target signal, up to a scale.
-    Split it up into smaller overlapping problems for efficiency
-
-    Parameters
-    ----------
-    Mag: ndarray(n_freq, N)
-        A magnitude spectrogram
-    target: ndarray(T >= N)
-        Target signal
-    win: int
-        Length of sliding window within a block
-    block_win: int
-        Length of block, in number of windows
-    min_freq: int
-        Minimum frequency index to use
-    max_freq: int
-        One beyond the maximum frequency index to use
-    eps_add: float
-        Maximum amount of additive perturbation allowed at each frequency bin
-    eps_ratio: float
-        Maximum amount of ratio perturbation allowed at each frequency bin
-    Mag_fixed: ndarray(n_freq, M)
-        Magnitude coefficients to hold fixed, starting from the beginning
-    Returns
-    -------
-    dict(
-        Mag: ndarray(n_freq, N)
-            The modified magnitude spectrogram,
-        cent: ndarray(N)
-            The computed original spectral centroids in the range [min_freq, max_freq)
-    )
-    """
-    MagRet = np.zeros_like(Mag)
-    MagLast = np.array([])
-    i = 0
-    NWin = Mag.shape[1] // (block_win-win+1)
-    idx = 1
-    while i+block_win <= Mag.shape[1]:
-        print("Doing window {} of {}...".format(idx, NWin))
-        Mag_fixed = np.array([])
-        if MagLast.size > 0:
-            Mag_fixed = MagLast[:, -(win-1)::]
-        res = windowed_spec_centroid_perturb(Mag[:, i:i+block_win], target[i:i+block_win-win+1],
-                                             win, min_freq, max_freq, eps_add, eps_ratio, Mag_fixed)
-        MagRet[:, i:i+block_win] = res['Mag']
-        i += block_win-win+1
-        idx += 1
-    return MagRet
-
-
-def spec_centroid(Mag, f1, f2, win):
-    """
-    Compute the windowed spectral centroid of a magnitude short time 
-    frequency transform within a particular frequency range
-
-    Parameters
-    ----------
-    Mag: ndarray(n_freq, N)
-        A magnitude spectrogram
-    f1: int
-        Minimum frequency index to use
-    f2: int
-        One beyond the maximum frequency index to use
-    win: int
-        Window to use
-    """
-    An, _ = get_windowed_spec_centroid_matrices(Mag, f1, f2, win)
-    return An.dot((Mag[f1:f2, :].T).flatten())
-
-
-def plot_stego_centroid_fit(f1, f2, win, orig, fit, target, med=31):
-    """
-    Plot the results of perturbing the spectral centroids
-
-    Parameters
-    ----------
-    f1: int
-        Minimum frequency index to use
-    f2: int
-        One beyond the maximum frequency index to use
-    win: int
-        Window length used
-    orig: ndarray(n_freq, N)
-        Original magnitude spectrogram
-    fit: ndarray(n_freq, N)
-        Computed magnitude spectrogram
-    target: ndarray(T >= N)
-        Target signal
-    med: int
-        Amount by which to median filter the fitted centroid
-    """
-    plt.subplot(131)
-    plt.imshow(orig[f1:f2, :] - fit[f1:f2, :], aspect='auto', cmap='gray')
-    plt.gca().invert_yaxis()
-    plt.colorbar()
-
-    plt.subplot(132)
-    h = spec_centroid(fit, f1, f2, win)
-    h = medfilt(h, med)
-    plt.scatter(h, target[0:h.size])
-    plt.axis("equal")
-                    
-    plt.subplot(133)
-    plt.plot(target)
-    plt.plot(h)
+@jit(nopython=True)
+def get_maxes(S, max_freq, time_win, freq_win):
+    ret = []
+    M, N = S.shape
+    for i in range(max_freq):
+        for j in range(N):
+            constraint = True
+            ni = max(0, i-freq_win)
+            while constraint and ni < min(max_freq, i+freq_win+1):
+                nj = max(0, j-time_win)
+                while constraint and nj < min(N, j+time_win+1):
+                    if ni != i or nj != j:
+                        if S[ni, nj] > S[i, j]:
+                            constraint = False
+                    nj += 1
+                ni += 1
+            if constraint:
+                ret.append([i, j])
+    return ret
