@@ -10,6 +10,9 @@ def get_snr(x, y):
     """
     Compute the SNR in dB
     """
+    N = min(x.size, y.size)
+    x = x[0:N]
+    y = y[0:N]
     power_sig = x**2
     power_noise = (y-x)**2
     snr = np.log10(np.mean(power_sig)) - np.log10(np.mean(power_noise))

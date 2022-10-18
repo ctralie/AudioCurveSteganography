@@ -63,7 +63,7 @@ class WindowedPhase(StegoSolver):
                 targetfi = np.array(target[:, coord])
                 targetfi = get_normalized_target(resf, targeti, 0, np.inf)
                 targetsi.append(targetfi)
-                csmfi = np.abs(targeti[:, None] - resf[None, :])
+                csmfi = np.abs(targetfi[:, None] - resf[None, :])
                 if csm.size == 0:
                     csm = csmfi
                 else:
@@ -145,14 +145,15 @@ class WindowedPhase(StegoSolver):
         M = self.targets[0][0].size
         X = np.zeros((M, self.dim))
         for coord in range(self.dim):
-            res = np.array([])
-            for f in self.freq_idxs[coord]:
+            res = np.zeros((len(self.freq_idxs[coord]), M))
+            for i, f in enumerate(self.freq_idxs[coord]):
                 resf = self.mat.dot(self.X[f, :])[0:M]
-                if res.size == 0:
-                    res = resf
-                else:
-                    res += resf
-            if normalize:
-                res = (res-np.mean(res))/np.std(res)
-            X[:, coord] = res
+                std = np.std(resf)
+                if normalize:
+                    if std == 0:
+                        resf = np.nan*np.ones(resf.size)
+                    else:
+                        resf = (resf-np.mean(resf))/std
+                res[i, :] = resf
+            X[:, coord] = np.nanmedian(res, axis=0)
         return X
