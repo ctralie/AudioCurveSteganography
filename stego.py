@@ -153,7 +153,7 @@ class SlidingWindowCentroidMatrix(LinearOperator):
         x += p1[None, :]
         p = np.zeros((K, M+2*self.win-1))
         mul = np.arange(K)[:, None]
-        p[:, self.win:self.win+M] = mul*y2[None, :]
+        p[:, self.win:self.win+M] = mul*y2[None, :]/self.denom[None, :]
         p = np.cumsum(p, axis=1)
         x += p[:, self.win::] - p[:, 0:-self.win]
         return x.flatten() + self.fit_lam*y[2*M::]
