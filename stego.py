@@ -74,6 +74,90 @@ class SlidingWindowSumMatrix(LinearOperator):
         x += self.get_sliding_window_contrib(y1, 1)
         return x.flatten() + self.fit_lam*y[M::]
 
+
+class SlidingWindowCentroidMatrix(LinearOperator):
+    """
+    Perform the effect of a sliding window average of a spectral centroid
+    """
+    def __init__(self, x_orig, win, denom_lam=1, fit_lam=1):
+        """
+        Parameters
+        ----------
+        x_orig: ndarray(K, N)
+            Spectrogram subset
+        win: int
+            Window length to use
+        denom_lam: float
+            The weight to put on the denominator
+        fit_lam: float
+            The weight to put on the fit term
+        """
+        K = x_orig.shape[0] # Number of frequencies
+        N = x_orig.shape[1] # Number of time points
+        M = N-win+1
+        self.K = K
+        self.N = N
+        self.shape = ((2*M+K*N, K*N))
+        self.win = win
+        self.denom_lam = denom_lam
+        self.fit_lam = fit_lam
+        self.dtype = float
+        x_orig = np.sum(x_orig, axis=0)
+        x_orig = np.concatenate(([0], x_orig))
+        x_orig = np.cumsum(x_orig)
+        self.denom = x_orig[win::]-x_orig[0:-win]
+        self.mul_calls = 0
+        self.rmul_calls = 0
+            
+    
+    def _matvec(self, x_param):
+        """
+        y1 holds the weighted denominator
+        y2 holds weighted sliding window sum
+        y3 holds the fit to the original
+        """
+        K = self.K
+        self.mul_calls += 1
+        self.rmul_calls += 1
+        x = np.zeros((K, x_param.size//K + 1))
+        x[:, 1::] = np.reshape(x_param, (K, x_param.size//K))
+        y1 = np.sum(x, axis=0)
+        y1 = np.cumsum(y1)
+        y1 = y1[self.win::]-y1[0:-self.win]
+        y1 = (K/2)*self.denom_lam*y1/self.denom
+        mul = np.arange(K)[:, None]
+        x2 = np.sum(x*mul, axis=0)
+        y2 = np.cumsum(x2)
+        y2 = y2[self.win::]-y2[0:-self.win]
+        y2 = y2/self.denom
+        y3 = self.fit_lam*x_param.flatten()
+        return np.concatenate((y1, y2, y3))
+    
+    def get_sliding_window_contrib(self, y, fac):
+        """
+        A helper function for the transpose
+        """
+        p = np.zeros(y.size+2*self.win-1)
+        p[self.win:self.win+y.size] = y*fac
+        p = np.cumsum(p)
+        return p[self.win::] - p[0:-self.win]
+    
+    def _rmatvec(self, y):
+        K = self.K
+        N = self.N
+        N = N-self.win+1
+        y1 = y[0:y.size//2]
+        y2 = y[y.size//2::]
+        x = np.zeros((K, N))
+        p1 = self.get_sliding_window_contrib(y1, (K/2)*self.denom_lam/self.denom)
+        x += p1[None, :]
+        p = np.zeros((K, y.size+2*self.win-1))
+        p[:, self.win:self.win+y.size] = (np.arange(K)[:, None])*y2[None, :]
+        p = np.cumsum(p, axis=1)
+        x += p[:, self.win::] - p[:, 0:-self.win]
+        return x.flatten() + self.fit_lam*y[2*M::]
+
+
 def get_window_energy(x, win, hop=1):
     """
     Return the sliding window squared energy of a signal
