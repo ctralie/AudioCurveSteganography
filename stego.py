@@ -255,7 +255,7 @@ class StegoSolver:
         self.targets = [] # Normalized target time series for each coordinate (dim total)
 
 
-    def reparam_targets(self, csm):
+    def get_viterbi_path(self, csm):
         """
         Re-parameterize a bunch of targets to fit 
 
@@ -268,7 +268,7 @@ class StegoSolver:
         viterbi_K = 1
         finished = False
         path = []
-        while not finished and viterbi_K < 10:
+        while not finished and viterbi_K < 20:
             pathk = viterbi_loop_trace(csm, viterbi_K)
             cost1 = np.sum(csm[pathk, np.arange(csm.shape[1])])
             path2 = viterbi_loop_trace(csm[:, ::-1], viterbi_K)
@@ -279,9 +279,25 @@ class StegoSolver:
             path_unwrap = np.unwrap(pathk, period=target_len)
             if np.abs(path_unwrap[0]-path_unwrap[-1]) >= target_len:
                 finished = True
-                path = pathk
             else:
                 viterbi_K += 1
+            path = pathk
+        print("viterbi_K = ", viterbi_K)
+        plt.figure()
+        plt.plot(path)
+        plt.show()
+        return path
+
+    def reparam_targets(self, csm):
+        """
+        Re-parameterize a bunch of targets to fit 
+
+        Parameters
+        ----------
+        csm: ndarray(target_len, signal_len)
+            Cross-similarity matrix between targets and signals
+        """
+        path = self.get_viterbi_path(csm)
         self.targets = [t[path] for t in self.targets]
         
     def solve(self):

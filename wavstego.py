@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import lsq_linear
 from pywt import wavedec, waverec, dwt, idwt
@@ -119,6 +120,13 @@ class WaveletCoeffs(StegoSolver):
         y = waverec(coeffs, self.wavtype)
         return y
 
+    def get_target(self, normalize=False):
+        ret = np.array(self.targets).T
+        if normalize:
+            ret = (ret - np.mean(ret, axis=0)[None, :])
+            ret = ret/np.std(ret, axis=0)[None, :]
+        return ret
+
     def get_signal(self, normalize=False):
         """
         Compute and z-normalize the sliding window centroids
@@ -139,3 +147,57 @@ class WaveletCoeffs(StegoSolver):
                 x = (x-np.mean(x))/np.std(x)
             X[:, coord] = x
         return X
+
+    def plot(self, normalize=False):
+        Y = self.get_target(normalize)
+        Z = self.get_signal(normalize)
+        res = 4
+        plt.figure(figsize=(res*3, res*(self.dim+2)))
+        for k in range(self.dim):
+            plt.subplot2grid((self.dim*2, 2), (k, 0), colspan=2)
+            plt.plot(Y[:, k])
+            plt.plot(Z[:, k])
+            plt.legend(["Target", "Signal"])
+            plt.subplot2grid((self.dim*2, 2), (self.dim, k))
+            plt.scatter(Y[:, k], Z[:, k], c=np.arange(Y.shape[0]), cmap='magma_r')
+            plt.xlabel("Target")
+            plt.ylabel("Signal")
+        plt.subplot2grid((self.dim*2, 2), (self.dim+1, 0))
+        plt.plot(Y[:, 0], Y[:, 1])
+        plt.title("Target")
+        plt.axis("equal")
+        plt.subplot2grid((self.dim*2, 2), (self.dim+1, 1))
+        plt.plot(Z[:, 0], Z[:, 1])
+        mean, mx = self.get_distortion()
+        L = Z[1::, :]-Z[0:-1, :]
+        L = np.sqrt(np.sum(L**2, axis=1))
+        L = np.sum(L)
+        plt.title("Reconstructed (Mean Distortion = {:.3f}, Max Distortion = {:.3f})\nLength = {:.3f}".format(mean, mx, L))
+        plt.axis("equal")
+        plt.tight_layout()
+    
+    def get_distortion(self):
+        """
+        Compute the average and max geometric distortion between the original 
+        target and the computed signal
+        """
+        Y = self.get_target(normalize=True)
+        Z = self.get_signal(normalize=True)
+        diff = np.sum((Y-Z)**2, axis=1)
+        diff = np.sqrt(diff)
+        return np.mean(diff), np.max(diff)
+
+
+        """
+        from scipy.spatial import KDTree
+        Y = np.array(self.target_orig)
+        Y -= np.mean(Y, axis=0)[None, :]
+        Y /= np.std(Y, axis=0)[None, :]
+        Z = self.get_signal(normalize=True)
+        treeY = KDTree(Y)
+        treeZ = KDTree(Z)
+        dd1, _ = treeY.query(Z, k=1)
+        dd2, _ = treeZ.query(Y, k=1)
+        dd = np.concatenate((dd1.flatten(), dd2.flatten()))
+        return np.mean(dd), np.max(dd)
+        """
