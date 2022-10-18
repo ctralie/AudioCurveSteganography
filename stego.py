@@ -145,14 +145,15 @@ class SlidingWindowCentroidMatrix(LinearOperator):
     def _rmatvec(self, y):
         K = self.K
         N = self.N
-        N = N-self.win+1
-        y1 = y[0:y.size//2]
-        y2 = y[y.size//2::]
+        M = N-self.win+1
+        y1 = y[0:M]
+        y2 = y[M:2*M]
         x = np.zeros((K, N))
         p1 = self.get_sliding_window_contrib(y1, (K/2)*self.denom_lam/self.denom)
         x += p1[None, :]
-        p = np.zeros((K, y.size+2*self.win-1))
-        p[:, self.win:self.win+y.size] = (np.arange(K)[:, None])*y2[None, :]
+        p = np.zeros((K, M+2*self.win-1))
+        mul = np.arange(K)[:, None]
+        p[:, self.win:self.win+M] = mul*y2[None, :]
         p = np.cumsum(p, axis=1)
         x += p[:, self.win::] - p[:, 0:-self.win]
         return x.flatten() + self.fit_lam*y[2*M::]
