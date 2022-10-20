@@ -37,11 +37,8 @@ class StegoWindowedPower(StegoSolver):
         Mat = SlidingWindowSumMatrix(N, win, fit_lam) # Matrix to do sliding window averaging transforms on each group of coefficients (dim total)
         self.Mat = Mat
         self.targets = [] # Normalized target time series for each coordinate (dim total)
-        self.coords = [] # Coordinate indices of each group of coefficients
         csm = np.array([]) # Cross-similarity matrix for aligned targets
-        K = len(self.signs)//self.dim
         for coord in range(self.dim):
-            self.coords += [coord]*K
             Y = self.coeffs[coord]
             M = Y.size-win+1
             res = Mat.dot(Y)
@@ -55,7 +52,6 @@ class StegoWindowedPower(StegoSolver):
             else:
                 csm += csmi
         self.csm = csm
-        self.coords = np.array(self.coords, dtype=int)
         self.reparam_targets(csm)
         
     def solve(self, verbose=0):
@@ -179,3 +175,50 @@ class WaveletCoeffs(StegoWindowedPower):
         return y
 
 
+
+##################################################
+#           NON-OVERLAPPING STFT BASED
+##################################################
+from spectrogramtools import *
+
+class STFTPower(StegoWindowedPower):
+    def __init__(self, x, target, win_length, freq_idxs, win, fit_lam=1, q=-1):
+        """
+        Parameters
+        ----------
+        x: ndarray(N pow of 2)
+            Audio samples
+        target: ndarray(M, dim)
+            Target curve
+        win_length: int
+            Window length to use in the disjoint spectrogram
+        freq_idxs: list(dim)
+            Which frequency indices to use for each coordinate
+        win: int
+            Window length to use in the sliding window power
+        fit_lam: float
+            Weight to put into the fit
+        q: float in [0, 1]
+            Quantile in which to keep magnitudes.
+            If -1, go up to infinity
+        """
+        StegoSolver.__init__(self, x, target)
+        ## Step 1: Compute wavelets at all levels
+        self.win_length = win_length
+        self.freq_idxs = freq_idxs
+        SX = stft_disjoint(x, win_length)
+        self.SXM = np.abs(SX) # Original magnitude
+        self.SXP = np.arctan2(np.imag(SX), np.real(SX))
+
+        ## Step 2: Setup all aspects of sliding windows
+        StegoWindowedPower.__init__(self, target, [self.SXM[f, :] for f in freq_idxs], win, fit_lam, q)
+
+    
+    def reconstruct_signal(self):
+        """
+        Return the 1D time series after inverting all wavelet transforms
+        """
+        SXM = np.array(self.SXM)
+        for f, m in zip(self.freq_idxs, self.coeffs):
+            SXM[f, :] = m
+        return istft_disjoint(SXM*np.exp(1j*self.SXP))
