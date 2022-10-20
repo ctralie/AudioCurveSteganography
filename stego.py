@@ -343,7 +343,7 @@ class StegoSolver:
         self.targets = [] # Normalized target time series for each coordinate (dim total)
 
 
-    def get_viterbi_path(self, csm):
+    def get_viterbi_path(self, csm, K = -1):
         """
         Re-parameterize a bunch of targets to fit 
 
@@ -351,12 +351,17 @@ class StegoSolver:
         ----------
         csm: ndarray(target_len, signal_len)
             Cross-similarity matrix between targets and signals
+        K: int
+            K to use with Viterbi.  If -1, loop through until
+            the path goes through at least one cycle
         """
         target_len = self.target_orig.shape[0]
         viterbi_K = 1
+        if K != -1:
+            viterbi_K = K
         finished = False
         path = []
-        while not finished and viterbi_K < 20:
+        while not finished and (K != -1 or viterbi_K < 20):
             pathk = viterbi_loop_trace(csm, viterbi_K)
             cost1 = np.sum(csm[pathk, np.arange(csm.shape[1])])
             path2 = viterbi_loop_trace(csm[:, ::-1], viterbi_K)
@@ -364,11 +369,14 @@ class StegoSolver:
             cost2 = np.sum(csm[path2, np.arange(csm.shape[1])])
             if cost2 < cost1:
                 pathk = path2
-            path_unwrap = np.unwrap(pathk, period=target_len)
-            if np.abs(path_unwrap[0]-path_unwrap[-1]) >= target_len:
+            if K != -1:
                 finished = True
             else:
-                viterbi_K += 1
+                path_unwrap = np.unwrap(pathk, period=target_len)
+                if np.abs(path_unwrap[0]-path_unwrap[-1]) >= target_len:
+                    finished = True
+                else:
+                    viterbi_K += 1
             path = pathk
         print("viterbi_K = ", viterbi_K)
         plt.figure()
@@ -376,7 +384,7 @@ class StegoSolver:
         plt.show()
         return path
 
-    def reparam_targets(self, csm):
+    def reparam_targets(self, csm, K=-1):
         """
         Re-parameterize a bunch of targets to fit 
 
@@ -384,9 +392,28 @@ class StegoSolver:
         ----------
         csm: ndarray(target_len, signal_len)
             Cross-similarity matrix between targets and signals
+        K: int
+            K to use with Viterbi.  If -1, loop through until
+            the path goes through at least one cycle
         """
-        path = self.get_viterbi_path(csm)
+        path = self.get_viterbi_path(csm, K)
         self.targets = [t[path] for t in self.targets]
+
+    def reparam_targets_multi(self, csm, K=-1):
+        """
+        Re-parameterize a bunch of targets to fit.  This version has
+        a list of lists of targets
+
+        Parameters
+        ----------
+        csm: ndarray(target_len, signal_len)
+            Cross-similarity matrix between targets and signals
+        K: int
+            K to use with Viterbi.  If -1, loop through until
+            the path goes through at least one cycle
+        """
+        path = self.get_viterbi_path(csm, K)
+        self.targets = [[t[path] for t in targetsi] for targetsi in self.targets]
         
     def solve(self):
         """

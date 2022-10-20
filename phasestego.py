@@ -70,19 +70,7 @@ class WindowedPhase(StegoSolver):
                     csm += csmfi
             self.targets.append(targetsi)
         self.csm = csm
-        self.reparam_targets(csm)
-        
-    def reparam_targets(self, csm):
-        """
-        Re-parameterize a bunch of targets to fit 
-
-        Parameters
-        ----------
-        csm: ndarray(target_len, signal_len)
-            Cross-similarity matrix between targets and signals
-        """
-        path = self.get_viterbi_path(csm)
-        self.targets = [[t[path] for t in targetsi] for targetsi in self.targets]
+        self.reparam_targets_multi(csm)
 
     def solve(self, verbose=0):
         """
@@ -124,13 +112,13 @@ class WindowedPhase(StegoSolver):
     def get_target(self, normalize=False):
         M = self.targets[0][0].size
         res = np.zeros((M, self.dim))
-        for i, targetsi in enumerate(self.targets):
+        for coord, targetsi in enumerate(self.targets):
             targeti = targetsi[0]
             for targetfi in targetsi[1::]:
                 targeti += targetfi
             if normalize:
                 targeti = (targeti-np.mean(targeti))/np.std(targeti)
-            res[:, i] = targeti
+            res[:, coord] = targeti
         return res
 
     def get_signal(self, normalize=False):
