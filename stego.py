@@ -506,3 +506,5 @@ class StegoSolver:
         dd = np.concatenate((dd1.flatten(), dd2.flatten()))
         return np.mean(dd), np.max(dd)
         """
+
+
