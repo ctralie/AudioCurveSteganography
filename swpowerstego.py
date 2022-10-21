@@ -52,7 +52,7 @@ class StegoWindowedPower(StegoSolver):
             else:
                 csm += csmi
         self.csm = csm
-        self.reparam_targets(csm)
+        self.path =self.reparam_targets(csm)
         
     def solve(self, verbose=0):
         """
@@ -128,7 +128,7 @@ class WaveletCoeffs(StegoWindowedPower):
         """
         Parameters
         ----------
-        x: ndarray(N pow of 2)
+        x: ndarray(N)
             Audio samples
         target: ndarray(M, dim)
             Target curve
@@ -181,12 +181,12 @@ class WaveletCoeffs(StegoWindowedPower):
 ##################################################
 from spectrogramtools import *
 
-class STFTPower(StegoWindowedPower):
+class STFTPowerDisjoint(StegoWindowedPower):
     def __init__(self, x, target, win_length, freq_idxs, win, fit_lam=1, q=-1):
         """
         Parameters
         ----------
-        x: ndarray(N pow of 2)
+        x: ndarray(N)
             Audio samples
         target: ndarray(M, dim)
             Target curve

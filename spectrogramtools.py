@@ -81,9 +81,6 @@ def stft(X, W, H, winfunc=blackman):
     Q = W/H
     if Q - np.floor(Q) > 0:
         print('Warning: Window size is not integer multiple of hop size')
-    if not winfunc:
-        #Use half sine by default
-        winfunc = halfsine
     win = winfunc(W)
     NWin = int(np.floor((X.size - W)/float(H)) + 1)
     S = np.zeros((W, NWin), dtype = np.complex)
@@ -123,9 +120,6 @@ def istft(pS, W, H, winfunc=blackman):
     Q = W/H
     if Q - np.floor(Q) > 0:
         print('Warning: Window size is not integer multiple of hop size')
-    if not winfunc:
-        #Use half sine by default
-        winfunc = halfsine
     win = winfunc(W)
     win = win/(Q/2.0)
 

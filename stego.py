@@ -18,6 +18,18 @@ def get_snr(x, y):
     snr = np.log10(np.mean(power_sig)) - np.log10(np.mean(power_noise))
     return 10*snr
 
+def get_snr_stft(x, y, win_length):
+    from spectrogramtools import stft_disjoint
+    N = min(x.size, y.size)
+    x = x[0:N]
+    y = y[0:N]
+    S1 = stft_disjoint(x, win_length)
+    S2 = stft_disjoint(y, win_length)
+    diff = S1 - S2
+    num = np.sum(np.abs(S1)**2)
+    denom = np.sum(np.abs(S1-S2)**2)
+    return 10*np.log10(num/denom)
+
 class SlidingWindowSumMatrix(LinearOperator):
     """
     Perform the effect of a sliding window sum of an array
@@ -398,6 +410,7 @@ class StegoSolver:
         """
         path = self.get_viterbi_path(csm, K)
         self.targets = [t[path] for t in self.targets]
+        return path
 
     def reparam_targets_multi(self, csm, K=-1):
         """
