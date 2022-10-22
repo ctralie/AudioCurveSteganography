@@ -391,9 +391,6 @@ class StegoSolver:
                     viterbi_K += 1
             path = pathk
         print("viterbi_K = ", viterbi_K)
-        plt.figure()
-        plt.plot(path)
-        plt.show()
         return path
 
     def reparam_targets(self, csm, K=-1):
@@ -458,15 +455,17 @@ class StegoSolver:
         """
         ret = np.array(self.targets).T
         if normalize:
-            ret = (ret - np.mean(ret, axis=0)[None, :])
-            ret = ret/np.std(ret, axis=0)[None, :]
+            #ret = (ret - np.mean(ret, axis=0)[None, :])
+            #ret = ret/np.std(ret, axis=0)[None, :]
+            ret = ret - np.min(ret, axis=0)[None, :]
+            ret = ret/np.max(ret, axis=0)[None, :]
         return ret
     
     def get_signal(self, normalize=False):
         print("Error: calling get_signal on parent class")
         return np.array([])
 
-    def plot(self, normalize=False):
+    def plot(self, normalize=False, title=""):
         Y = self.get_target(normalize)
         Z = self.get_signal(normalize)
         res = 4
@@ -480,6 +479,7 @@ class StegoSolver:
             plt.scatter(Y[:, k], Z[:, k], c=np.arange(Y.shape[0]), cmap='magma_r')
             plt.xlabel("Target")
             plt.ylabel("Signal")
+            plt.title(title)
         plt.subplot2grid((self.dim*2, 2), (self.dim+1, 0))
         plt.plot(Y[:, 0], Y[:, 1])
         plt.title("Target")
