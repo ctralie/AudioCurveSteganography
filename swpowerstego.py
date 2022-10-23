@@ -213,7 +213,7 @@ class STFTPowerDisjoint(StegoWindowedPower):
             If -1, go up to infinity
         """
         StegoSolver.__init__(self, x, target)
-        ## Step 1: Compute wavelets at all levels
+        ## Step 1: Compute STFT
         self.win_length = win_length
         self.freq_idxs = freq_idxs
         SX = stft_disjoint(x, win_length)
@@ -260,7 +260,7 @@ class STFTPowerDisjointPCA(StegoWindowedPower):
             If -1, go up to infinity
         """
         StegoSolver.__init__(self, x, target)
-        ## Step 1: Compute wavelets at all levels
+        ## Step 1: Compute STFT
         self.win_length = win_length
         SX = stft_disjoint(x, win_length)
         self.SX = np.array(SX)
@@ -299,5 +299,3 @@ class STFTPowerDisjointPCA(StegoWindowedPower):
         perturbed = perturbed[0:M, :] + 1j*perturbed[M::, :]
         SX[f1:f2, :] += perturbed
         return istft_disjoint(SX)
-
-

@@ -237,6 +237,9 @@ def voronoi_stipple(I, thresh, target_points, p=1, canny_sigma=0, edge_weight=1,
     ## Step 1: Get weights and initialize random point distribution
     ## via rejection sampling
     weights = get_weights(I, thresh, p, canny_sigma, edge_weight)
+    if np.sum(weights) == 0:
+        print("WARNING: No significant features found")
+        return np.array([[]])
     X = rejection_sample_by_density(weights, target_points)
     X = np.array(np.round(X), dtype=int)
     X[X[:, 0] >= weights.shape[0], 0] = weights.shape[0]-1
