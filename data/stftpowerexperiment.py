@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.io as sio
-import librosa
 from scipy.io import wavfile
+import librosa
 import os
 import subprocess
 import sys
@@ -79,13 +79,18 @@ if __name__ == '__main__':
                     mp3filename = "{}.mp3".format(prefix)
                     wavfilename = "{}.wav".format(prefix)
                     wavfile.write(wavfilename, sr, y)
+                    # Step 1: Convert from wav to MP3
                     if os.path.exists(mp3filename):
                         os.remove(mp3filename)
                     subprocess.call(["{}/ffmpeg".format(repo_path), "-i", wavfilename, mp3filename], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
                     os.remove(wavfilename)
 
-                    z, sr = librosa.load(mp3filename, sr=sr)
+                    # Step 2: Convert from mp3 back to wav so it can be read
+                    subprocess.call(["{}/ffmpeg".format(repo_path), "-i", mp3filename, wavfilename], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                    z, sr = librosa.load(wavfilename, sr=sr)
+                    os.remove(wavfilename)
                     os.remove(mp3filename)
+                    
                     z_sp = STFTPowerDisjoint(z, X, win_length, freqs, win, fit_lam, q, do_viterbi=do_viterbi)
                     z_sp.targets = sp.targets
                     Y = z_sp.get_signal(normalize=True)
