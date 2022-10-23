@@ -393,9 +393,10 @@ class StegoSolver:
         print("viterbi_K = ", viterbi_K)
         return path
 
-    def reparam_targets(self, csm, K=-1):
+    def reparam_targets(self, csm, K=-1, do_viterbi=True):
         """
-        Re-parameterize a bunch of targets to fit 
+        Re-parameterize a bunch of targets to fit their 
+        associated signals
 
         Parameters
         ----------
@@ -405,7 +406,14 @@ class StegoSolver:
             K to use with Viterbi.  If -1, loop through until
             the path goes through at least one cycle
         """
-        path = self.get_viterbi_path(csm, K)
+        path = []
+        if do_viterbi:
+            path = self.get_viterbi_path(csm, K)
+        else:
+            # If not doing viterbi, go through at a constant 
+            # interval equal to ceil(target_length / signal_length)
+            skip = int(np.ceil(csm.shape[0]/csm.shape[1]))
+            path = np.mod(skip*np.arange(csm.shape[1]), csm.shape[0])
         self.targets = [t[path] for t in self.targets]
         return path
 

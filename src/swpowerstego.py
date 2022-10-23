@@ -1,3 +1,4 @@
+from unittest import TestResult
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import lsq_linear
@@ -10,7 +11,7 @@ class StegoWindowedPower(StegoSolver):
     """
     A class for doing sliding window power on some nonnegative coefficients
     """
-    def __init__(self, target, coeffs, win, fit_lam=1, q=-1, min_target=0, max_target=np.inf):
+    def __init__(self, target, coeffs, win, fit_lam=1, q=-1, min_target=0, max_target=np.inf, do_viterbi=True):
         """
         Parameters
         ----------
@@ -29,6 +30,8 @@ class StegoWindowedPower(StegoSolver):
             Minimum endpoint of target normalization interval
         max_target: float
             Maximum endpoint of target normalization interval
+        do_viterbi: boolean
+            Whether or not to do viterbi coding to find a better path
         """
         self.win = win
         self.fit_lam = fit_lam
@@ -57,7 +60,7 @@ class StegoWindowedPower(StegoSolver):
             else:
                 csm += csmi
         self.csm = csm
-        self.path =self.reparam_targets(csm)
+        self.path = self.reparam_targets(csm, do_viterbi=do_viterbi)
         
     def solve(self, verbose=0, use_constraints=True):
         """
@@ -134,7 +137,7 @@ def subdivide_wavelet_rec(coeffs, wavtype):
     return idwt(cA, cD, wavtype)
 
 class WaveletCoeffs(StegoWindowedPower):
-    def __init__(self, x, target, win, fit_lam=1, wavtype='haar', wavlevel=7, coefflevel=1, q=-1):
+    def __init__(self, x, target, win, fit_lam=1, wavtype='haar', wavlevel=7, coefflevel=1, q=-1, do_viterbi=TestResult):
         """
         Parameters
         ----------
@@ -153,6 +156,8 @@ class WaveletCoeffs(StegoWindowedPower):
         q: float in [0, 1]
             Quantile in which to keep magnitudes.
             If -1, go up to infinity
+        do_viterbi: boolean
+            Whether or not to do viterbi coding to find a better path
         """
         StegoSolver.__init__(self, x, target)
         ## Step 1: Compute wavelets at all levels
@@ -167,7 +172,7 @@ class WaveletCoeffs(StegoWindowedPower):
         ## Step 2: Setup all aspects of sliding windows
         # Signs of wavelet coefficients before squaring
         self.signs = [np.sign(x) for x in coeffs_mod] 
-        StegoWindowedPower.__init__(self, target, [p**2 for p in coeffs_mod], win, fit_lam, q)
+        StegoWindowedPower.__init__(self, target, [p**2 for p in coeffs_mod], win, fit_lam, q, do_viterbi=do_viterbi)
 
     
     def reconstruct_signal(self):
@@ -192,7 +197,7 @@ class WaveletCoeffs(StegoWindowedPower):
 from spectrogramtools import *
 
 class STFTPowerDisjoint(StegoWindowedPower):
-    def __init__(self, x, target, win_length, freq_idxs, win, fit_lam=1, q=-1):
+    def __init__(self, x, target, win_length, freq_idxs, win, fit_lam=1, q=-1, do_viterbi=True):
         """
         Parameters
         ----------
@@ -211,6 +216,8 @@ class STFTPowerDisjoint(StegoWindowedPower):
         q: float in [0, 1]
             Quantile in which to keep magnitudes.
             If -1, go up to infinity
+        do_viterbi: boolean
+            Whether or not to do viterbi coding to find a better path
         """
         StegoSolver.__init__(self, x, target)
         ## Step 1: Compute STFT
@@ -221,7 +228,7 @@ class STFTPowerDisjoint(StegoWindowedPower):
         self.SXP = np.arctan2(np.imag(SX), np.real(SX))
 
         ## Step 2: Setup all aspects of sliding windows
-        StegoWindowedPower.__init__(self, target, [self.SXM[f, :] for f in freq_idxs], win, fit_lam, q)
+        StegoWindowedPower.__init__(self, target, [self.SXM[f, :] for f in freq_idxs], win, fit_lam, q, do_viterbi=do_viterbi)
 
     
     def reconstruct_signal(self):
@@ -235,7 +242,7 @@ class STFTPowerDisjoint(StegoWindowedPower):
 
 
 class STFTPowerDisjointPCA(StegoWindowedPower):
-    def __init__(self, x, target, sr, win_length, min_freq, max_freq, win, fit_lam=1, q=-1, pca=None):
+    def __init__(self, x, target, sr, win_length, min_freq, max_freq, win, fit_lam=1, q=-1, pca=None, do_viterbi=True):
         """
         Parameters
         ----------
@@ -258,6 +265,8 @@ class STFTPowerDisjointPCA(StegoWindowedPower):
         q: float in [0, 1]
             Quantile in which to keep magnitudes.
             If -1, go up to infinity
+        do_viterbi: boolean
+            Whether or not to do viterbi coding to find a better path
         """
         StegoSolver.__init__(self, x, target)
         ## Step 1: Compute STFT
@@ -280,7 +289,7 @@ class STFTPowerDisjointPCA(StegoWindowedPower):
         self.pca = pca
 
         ## Step 2: Setup all aspects of sliding windows
-        StegoWindowedPower.__init__(self, target, Y.T, win, fit_lam, q, -np.inf, np.inf)
+        StegoWindowedPower.__init__(self, target, Y.T, win, fit_lam, q, -np.inf, np.inf, do_viterbi)
 
     
     def reconstruct_signal(self):
