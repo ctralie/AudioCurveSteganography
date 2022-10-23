@@ -81,7 +81,7 @@ if __name__ == '__main__':
                     wavfile.write(wavfilename, sr, y)
                     if os.path.exists(mp3filename):
                         os.remove(mp3filename)
-                    subprocess.call(["ffmpeg", "-i", wavfilename, mp3filename], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                    subprocess.call(["{}/ffmpeg".format(repo_path), "-i", wavfilename, mp3filename], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
                     os.remove(wavfilename)
 
                     z, sr = librosa.load(mp3filename, sr=sr)
