@@ -108,7 +108,7 @@ def bosch_grid_stipple(I, res, gamma, contrast_boost):
     return X
 
 
-def get_weights(I, thresh, p=1, canny_sigma=0):
+def get_weights(I, thresh, p=1, canny_sigma=0, edge_weight=1):
     """
     Create pre-pixel weights based on image brightness
 
@@ -120,6 +120,10 @@ def get_weights(I, thresh, p=1, canny_sigma=0):
         Amount above which to make a point 1
     p: float
         Contrast boost, apply weights^(1/p)
+    canny_sigma: float
+        If >0, use a canny edge detector with this standard deviation
+    edge_weight: float
+        Weight to apply to edges, relative to the background
     
     Returns
     -------
@@ -141,6 +145,8 @@ def get_weights(I, thresh, p=1, canny_sigma=0):
     weights = weights**(1/p)
     if canny_sigma > 0:
         from skimage import feature
+        if edge_weight > 1:
+            weights /= edge_weight
         edges = feature.canny(I, sigma=canny_sigma)
         weights[edges > 0] = 1
     return weights
@@ -196,7 +202,7 @@ def get_centroids(mask, N, weights):
     denoms = denoms[denoms > 0]
     return nums, denoms
 
-def voronoi_stipple(I, thresh, target_points, p=1, canny_sigma=0, n_iters=10, do_plot=False):
+def voronoi_stipple(I, thresh, target_points, p=1, canny_sigma=0, edge_weight=1, n_iters=10, do_plot=False):
     """
     An implementation of the method of [2]
 
@@ -212,6 +218,8 @@ def voronoi_stipple(I, thresh, target_points, p=1, canny_sigma=0, n_iters=10, do
         Contrast boost, apply weights^(1/p)
     canny_sigma: float
         If >0, use a canny edge detector with this standard deviation
+    edge_weight: float
+        Weight to apply to edges, relative to the background
     n_iters: int
         Number of iterations
     do_plot: bool
@@ -225,7 +233,7 @@ def voronoi_stipple(I, thresh, target_points, p=1, canny_sigma=0, n_iters=10, do
         I = 0.2125*I[:, :, 0] + 0.7154*I[:, :, 1] + 0.0721*I[:, :, 2]
     ## Step 1: Get weights and initialize random point distribution
     ## via rejection sampling
-    weights = get_weights(I, thresh, p, canny_sigma)
+    weights = get_weights(I, thresh, p, canny_sigma, edge_weight)
     X = rejection_sample_by_density(weights, target_points)
     X = np.array(np.round(X), dtype=int)
     X[X[:, 0] >= weights.shape[0], 0] = weights.shape[0]-1
