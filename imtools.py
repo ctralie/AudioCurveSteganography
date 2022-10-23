@@ -140,9 +140,12 @@ def get_weights(I, thresh, p=1, canny_sigma=0, edge_weight=1):
         weights /= 255
     weights = np.minimum(weights, thresh)
     weights -= np.min(weights)
-    weights /= np.max(weights)
-    weights = 1-weights
-    weights = weights**(1/p)
+    if np.max(weights) == 0:
+        weights = 0*weights
+    else:
+        weights /= np.max(weights)
+        weights = 1-weights
+        weights = weights**(1/p)
     if canny_sigma > 0:
         from skimage import feature
         if edge_weight > 1:
@@ -240,10 +243,13 @@ def voronoi_stipple(I, thresh, target_points, p=1, canny_sigma=0, edge_weight=1,
     X[X[:, 1] >= weights.shape[1], 1] = weights.shape[1]-1
 
     if do_plot:
-        plt.figure(figsize=(10, 10))
+        plt.figure(figsize=(12, 6))
     for it in range(n_iters):
         if do_plot:
             plt.clf()
+            plt.subplot(121)
+            plt.imshow(weights)
+            plt.subplot(122)
             plt.scatter(X[:, 1], X[:, 0], 4)
             plt.gca().invert_yaxis()
             plt.xlim([0, weights.shape[1]])
