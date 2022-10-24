@@ -74,6 +74,10 @@ if __name__ == '__main__':
                     sp.solve()
                     elapsed = time.time()-tic
                     y = sp.reconstruct_signal()
+                    snr_before = get_snr(x, y)
+                    distortion_before = sp.get_distortion()[0]
+                    Y = sp.get_signal(normalize=True)
+                    length_before = get_length(Y)
 
                     prefix = "{}/results/{}_SpecPower_Win{}_fit{:.3g}_stftwin{}_freqs{}_{}_q{}".format(repo_path, audio_idx, win, fit_lam, win_length, freqs[0], freqs[1], q)
                     mp3filename = "{}.mp3".format(prefix)
@@ -96,6 +100,7 @@ if __name__ == '__main__':
                     Y = z_sp.get_signal(normalize=True)
                     snr = get_snr(x, z)
                     distortion = z_sp.get_distortion()[0]
-                    fout.write("{} {} {} {} {} {} {}\n".format(win, fit_lam, do_viterbi, snr, distortion, get_length(Y), elapsed))
+                    length = get_length(Y)
+                    fout.write("{} {} {} {} {} {} {} {} {} {}\n".format(win, fit_lam, do_viterbi, snr_before, distortion_before, length_before, snr, distortion, length, elapsed))
                     fout.flush()
     fout.close()
