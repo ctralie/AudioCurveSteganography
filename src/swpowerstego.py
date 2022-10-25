@@ -241,6 +241,41 @@ class STFTPowerDisjoint(StegoWindowedPower):
         return istft_disjoint(SXM*np.exp(1j*self.SXP))
 
 
+def get_rotated_distortion(Y, Z, flip, theta):
+    """
+    Compute the distortion between one centered curve
+    and its rotated version
+
+    Parameters
+    ----------
+    Y: ndarray(N, 2)
+        Target
+    Z: ndarray(N, 2)
+        Reconstructed
+    flip: boolean
+        Whether to flip z
+    theta: float
+        Angle (in radians) by which to rotate Z
+
+    Returns
+    -------
+    ZRot: ndarray(N, 2)
+        Rotated/centered Z
+    distortion: float
+        Distortion
+    """
+    c = np.cos(theta)
+    s = np.sin(theta)
+    R = np.array([[c, s], [-s, c]])
+    Z = Z.dot(R)
+    if flip:
+        Z[:, 0] *= -1
+    Z = Z - np.min(Z, axis=0)[None, :]
+    Z = Z/np.max(Z, axis=0)[None, :]
+    Z -= np.mean(Z, axis=0)[None, :]
+    d = np.sqrt(np.sum((Y-Z)**2, axis=1))
+    return Z, np.mean(d)
+
 class STFTPowerDisjointPCA(StegoWindowedPower):
     def __init__(self, x, target, sr, win_length, min_freq, max_freq, win, fit_lam=1, q=-1, pca=None, do_viterbi=True):
         """
@@ -308,3 +343,52 @@ class STFTPowerDisjointPCA(StegoWindowedPower):
         perturbed = perturbed[0:M, :] + 1j*perturbed[M::, :]
         SX[f1:f2, :] += perturbed
         return istft_disjoint(SX)
+    
+    def get_transformed_distortion(self):
+        """
+        Compute the best match of the reconstructed signal to the
+        target, up to a rotation/flip.scale
+
+        Returns
+        -------
+        ZRot: ndarray(N, 2)
+            Rotated/centered Z
+        distortion: float
+            Distortion
+        """
+        Z = self.get_signal()
+        Z -= np.mean(Z, axis=0)[None, :]
+        Y = self.get_target(normalize=True)
+        Y = Y - np.mean(Y, axis=0)[None, :]
+
+        min_d = np.inf
+        min_flip = False
+        min_theta = 0
+        for flip in [False, True]:
+            for theta in np.linspace(0, 2*np.pi, 50):
+                plt.clf()
+                d = get_rotated_distortion(Y, Z, flip, theta)[1]
+                if d < min_d:
+                    min_d = d
+                    min_flip = flip
+                    min_theta = theta
+
+        # Now do golden sections search
+        a = min_theta - 0.2
+        b = min_theta + 0.2
+        gr = (np.sqrt(5)+1)/2
+        c = b - (b-a)/gr
+        d = a + (b-a)/gr
+        fit_fn = lambda theta: get_rotated_distortion(Y, Z, min_flip, theta)[1]
+        max_iters =  50
+        for it in range(max_iters):
+            x = fit_fn(c)
+            y = fit_fn(d) 
+            if x < y:
+                b = d
+            else:
+                a = c
+            c = b - (b-a)/gr
+            d = a + (b-a)/gr
+        min_theta = (a+b)/2
+        return get_rotated_distortion(Y, Z, min_flip, min_theta)

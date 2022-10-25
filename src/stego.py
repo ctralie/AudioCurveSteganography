@@ -25,10 +25,29 @@ def get_snr_stft(x, y, win_length):
     y = y[0:N]
     S1 = stft_disjoint(x, win_length)
     S2 = stft_disjoint(y, win_length)
-    diff = S1 - S2
     num = np.sum(np.abs(S1)**2)
     denom = np.sum(np.abs(S1-S2)**2)
     return 10*np.log10(num/denom)
+
+def get_length(X):
+    """
+    Compute the length along a Euclidean curve
+
+    Parameters
+    ----------
+    X: ndarray(N, d)
+        Input curve
+    
+    Returns
+    -------
+    float: Length along X
+    """
+    Y = np.array(X)
+    Y -= np.min(Y, axis=0)[None, :]
+    Y /= np.max(Y, axis=0)[None, :]
+    d = Y[1::, :] - Y[0:-1, :]
+    d = np.sqrt(np.sum(d**2, axis=1))
+    return np.sum(d)
 
 class SlidingWindowSumMatrix(LinearOperator):
     """
