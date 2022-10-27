@@ -96,7 +96,7 @@ if __name__ == '__main__':
                     os.remove(mp3filename)
                     
                     z_sp = STFTPowerDisjoint(z, X, win_length, freqs, win, fit_lam, q, do_viterbi=do_viterbi)
-                    z_sp.targets = sp.targets
+                    z_sp.MagSolver.targets = sp.MagSolver.targets
                     Y = z_sp.get_signal(normalize=True)
                     snr = get_snr(x, z)
                     distortion = z_sp.get_distortion()[0]

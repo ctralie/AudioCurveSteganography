@@ -289,6 +289,8 @@ def get_hamiltonian_cycle(VPos, ITris, prefix="", blossom_path="./blossom5"):
     
     Returns
     -------
+    Y:ndarray(K > M, 3)
+        Hamiltonian cycle vertices
     """
     ## Step 1: Construct a dictionary from edges to triangle indices
     e2tris = {}

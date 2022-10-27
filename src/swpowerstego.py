@@ -218,22 +218,26 @@ class STFTPowerDisjoint(StegoWindowedPower):
         Reconstruct the magnitude components and scale them by the 
         average phases
         """
-        res = self.MagSolver.get_signal(normalize=True)
-        scale = self.PhaseSolver.get_signal(normalize=False)
-        scales = np.median(scale, axis=0)
-        scales -= 0.25
-        scales /= np.max(scales)
-        return res*scales[None, :]
+        res = self.MagSolver.get_signal(normalize=normalize)
+        if normalize:
+            scale = self.PhaseSolver.get_signal(normalize=False)
+            scales = np.median(scale, axis=0)
+            scales -= 0.25
+            scales /= np.max(scales)
+            res = res*scales[None, :]
+        return res
 
     def get_target(self, normalize=True):
         res = self.MagSolver.targets
         res = np.array(res).T
-        res -= np.min(res, axis=0)[None, :]
-        res /= np.max(res, axis=0)[None, :]
-        scales = np.mean(self.PhaseSolver.target_orig, axis=0)
-        scales -= 0.25
-        scales /= np.max(scales)
-        return res*scales[None, :]
+        if normalize:
+            res -= np.min(res, axis=0)[None, :]
+            res /= np.max(res, axis=0)[None, :]
+            scales = np.median(self.PhaseSolver.target_orig, axis=0)
+            scales -= 0.25
+            scales /= np.max(scales)
+            res = res*scales[None, :]
+        return res
 
 
 
