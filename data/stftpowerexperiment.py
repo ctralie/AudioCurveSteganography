@@ -64,8 +64,8 @@ if __name__ == '__main__':
         fout.write("{} {}\n".format(tsp_path, get_length(X)))
 
         # Solve for fit
-        for win in [1, 10, 50, 100]:
-            for fit_lam in [0.1, 1, 10]:
+        for win in [1, 2, 4, 8, 16, 32, 64, 128]:
+            for fit_lam in [0.01, 0.1, 1, 10]:
                 for do_viterbi in [False, True]:
                     q = -1
                     max_ratio = 0
