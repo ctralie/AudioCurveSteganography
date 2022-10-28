@@ -1,0 +1,5 @@
+results/LowFreq/*.txt
+results/LowFreq2/*.txt
+results/PCA/*.txt
+notebooks/*.png
+notebooks/*.mp3
