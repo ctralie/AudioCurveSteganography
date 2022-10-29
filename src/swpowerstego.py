@@ -11,7 +11,7 @@ class StegoWindowedPower(StegoSolver):
     """
     A class for doing sliding window power on some nonnegative coefficients
     """
-    def __init__(self, target, coeffs, win, fit_lam=1, q=-1, min_target=0, max_target=np.inf, do_viterbi=True, normalize_target=True):
+    def __init__(self, target, coeffs, win, fit_lam=1, q=-1, rescale_targets=True, do_viterbi=2):
         """
         Parameters
         ----------
@@ -26,14 +26,10 @@ class StegoWindowedPower(StegoSolver):
         q: float in [0, 1]
             Quantile in which to keep magnitudes.
             If -1, go up to infinity
-        min_target: float
-            Minimum endpoint of target normalization interval
-        max_target: float
-            Maximum endpoint of target normalization interval
-        do_viterbi: boolean
-            Whether or not to do viterbi coding to find a better path
-        normalize_target: boolean
-            Whether to normalize the targets to the range of the signal or not
+        rescale_targets: bool
+            If true, solve for a and be to best match signals_i = a*targets_i+b
+        do_viterbi: bool
+            Whether to do Viterbi to find a better path
         """
         self.win = win
         self.fit_lam = fit_lam
@@ -49,24 +45,14 @@ class StegoWindowedPower(StegoSolver):
         N = len(self.coeffs[0])
         Mat = SlidingWindowSumMatrix(N, win, fit_lam) # Matrix to do sliding window averaging transforms on each group of coefficients (dim total)
         self.Mat = Mat
-        self.targets = [] # Normalized target time series for each coordinate (dim total)
-        csm = np.array([]) # Cross-similarity matrix for aligned targets
+        signals = []
         for coord in range(self.dim):
             Y = self.coeffs[coord]
             M = Y.size-win+1
             res = Mat.dot(Y)
-            res = res[0:M]
-            targeti = np.array(target[:, coord])
-            if normalize_target:
-                targeti = get_normalized_target(res, targeti, min_target, max_target)
-            self.targets.append(targeti)
-            csmi = np.abs(targeti[:, None] - res[None, :])
-            if csm.size == 0:
-                csm = csmi
-            else:
-                csm += csmi
-        self.csm = csm
-        self.path = self.reparam_targets(csm, do_viterbi=do_viterbi)
+            signals.append(res[0:M])
+        self.targets = [target[:, k] for k in range(target.shape[1])]
+        self.setup_targets(signals, rescale_targets, do_viterbi)
         
     def solve(self, verbose=0, mn=0, mx=np.inf, use_constraints=True):
         """
@@ -131,7 +117,7 @@ class StegoWindowedPower(StegoSolver):
 from spectrogramtools import *
 
 class STFTPowerDisjoint(StegoWindowedPower):
-    def __init__(self, x, target, win_length, freq_idxs, win, fit_lam=1, q=-1, do_viterbi=True, Q=4):
+    def __init__(self, x, target, win_length, freq_idxs, win, fit_lam=1, q=-1, rescale_targets=True, do_viterbi=True, Q=4):
         """
         Parameters
         ----------
@@ -150,8 +136,10 @@ class STFTPowerDisjoint(StegoWindowedPower):
         q: float in [0, 1]
             Quantile in which to keep magnitudes.
             If -1, go up to infinity
-        do_viterbi: boolean
-            Whether or not to do viterbi coding to find a better path
+        rescale_targets: bool
+            If true, solve for a and be to best match signals_i = a*targets_i+b
+        do_viterbi: bool
+            Whether to do Viterbi to find a better path
         Q: int
             Use 2*pi/Q range to store each phase encoded component
         """
@@ -166,7 +154,7 @@ class STFTPowerDisjoint(StegoWindowedPower):
         target -= np.min(target, axis=0)[None, :]
         target /= np.max(target)
         StegoSolver.__init__(self, x, target)
-        self.MagSolver = StegoWindowedPower(target, [self.SXM[f, :] for f in freq_idxs], win, fit_lam, q, do_viterbi=do_viterbi)
+        self.MagSolver = StegoWindowedPower(target, [self.SXM[f, :] for f in freq_idxs], win, fit_lam, q, rescale_targets=rescale_targets, do_viterbi=do_viterbi)
 
         ## Step 3: Setup solvers phase components, with target a repeated constant
         ## indicating the scale of each component
@@ -180,7 +168,7 @@ class STFTPowerDisjoint(StegoWindowedPower):
         P = np.minimum(PLow, PHigh)
         scales = 0.5*np.max(target, axis=0) + 0.25
         scales = scales[None, :]*np.ones((P.shape[1], 1))
-        self.PhaseSolver = StegoWindowedPower(scales, P, 1, fit_lam, q, do_viterbi=False, normalize_target=False)
+        self.PhaseSolver = StegoWindowedPower(scales, P, 1, fit_lam, q, rescale_targets=False, do_viterbi=False)
 
     def solve(self):
         self.MagSolver.solve(mn=0, mx=np.inf, use_constraints=True)
@@ -267,7 +255,7 @@ def subdivide_wavelet_rec(coeffs, wavtype):
     return idwt(cA, cD, wavtype)
 
 class WaveletCoeffs(StegoWindowedPower):
-    def __init__(self, x, target, win, fit_lam=1, wavtype='haar', wavlevel=7, coefflevel=1, q=-1, do_viterbi=TestResult):
+    def __init__(self, x, target, win, fit_lam=1, wavtype='haar', wavlevel=7, coefflevel=1, q=-1, do_viterbi=True):
         """
         Parameters
         ----------
