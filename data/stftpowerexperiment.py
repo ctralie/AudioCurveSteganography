@@ -60,16 +60,20 @@ if __name__ == '__main__':
     fout = open("{}/results/{}.txt".format(repo_path, audio_idx), "w")
     for tsp_path in tsp_paths:
         X = sio.loadmat(tsp_path)["X"]
+        s = get_arclen(get_curv_vectors(X, 0, 1, loop=True)[1])
+        X = arclen_resample(X, s, X.shape[0])
+        sigma = 1
+        X = get_curv_vectors(X, 0, sigma, loop=True)[0]
+
         # First store length of normalized TSP path
         fout.write("{} {}\n".format(tsp_path, get_length(X)))
 
         # Solve for fit
-        for win in [1, 2, 4, 8, 16, 32, 64, 128]:
-            for fit_lam in [0.01, 0.1, 1, 10]:
+        for win in [1, 2, 4, 8, 16, 32, 64]:
+            for fit_lam in [0.1, 1, 10]:
                 for do_viterbi in [False, True]:
                     q = -1
-                    max_ratio = 0
-                    sp = STFTPowerDisjoint(x, X, win_length, freqs, win, fit_lam, q, do_viterbi=do_viterbi)
+                    sp = STFTPowerDisjoint(x, X, win_length, freqs, freqs, win, fit_lam, q, do_viterbi=do_viterbi)
                     tic = time.time()
                     sp.solve()
                     elapsed = time.time()-tic
@@ -95,7 +99,7 @@ if __name__ == '__main__':
                     os.remove(wavfilename)
                     os.remove(mp3filename)
                     
-                    z_sp = STFTPowerDisjoint(z, X, win_length, freqs, win, fit_lam, q, do_viterbi=do_viterbi)
+                    z_sp = STFTPowerDisjoint(z, X, win_length, freqs, freqs, win, fit_lam, q, do_viterbi=do_viterbi)
                     z_sp.MagSolver.targets = sp.MagSolver.targets
                     Y = z_sp.get_signal(normalize=True)
                     snr = get_snr(x, z)

@@ -54,7 +54,7 @@ class StegoWindowedPower(StegoSolver):
         self.targets = [target[:, k] for k in range(target.shape[1])]
         self.setup_targets(signals, rescale_targets, do_viterbi)
         
-    def solve(self, verbose=0, mn=0, mx=np.inf, use_constraints=True):
+    def solve(self, verbose=0, mn=0, mx=np.inf, use_constraints=True, verbose_time=True):
         """
         Perform linear least squares to perturb the coefficients
         to best match their targets
@@ -72,7 +72,8 @@ class StegoWindowedPower(StegoSolver):
         M = self.targets[0].size
         for coord in range(self.dim):
             tic = time.time()
-            print("Computing target coordinate {} of {}...\n".format(coord+1, self.dim))
+            if verbose_time:
+                print("Computing target coordinate {} of {}...\n".format(coord+1, self.dim))
             Y = self.coeffs[coord]
             if self.q != -1:
                 eps = np.quantile(Y.flatten(), self.q)
@@ -85,7 +86,8 @@ class StegoWindowedPower(StegoSolver):
                 self.coeffs[coord] = lsq_linear(self.Mat, y, (mn, mx), verbose=verbose)['x']
             else:
                 self.coeffs[coord] = lsq_linear(self.Mat, y, verbose=verbose)['x']
-            print("Elapsed time: {:.3f}".format(time.time()-tic))
+            if verbose_time:
+                print("Elapsed time: {:.3f}".format(time.time()-tic))
 
     def get_signal(self, normalize=False):
         """
@@ -117,7 +119,7 @@ class StegoWindowedPower(StegoSolver):
 from spectrogramtools import *
 
 class STFTPowerDisjoint(StegoWindowedPower):
-    def __init__(self, x, target, win_length, freq_idxs, win, fit_lam=1, q=-1, rescale_targets=True, do_viterbi=True, Q=4):
+    def __init__(self, x, target, win_length, mag_idxs, phase_idxs, win, fit_lam=1, q=-1, rescale_targets=True, do_viterbi=True, Q=4):
         """
         Parameters
         ----------
@@ -127,8 +129,10 @@ class STFTPowerDisjoint(StegoWindowedPower):
             Target curve
         win_length: int
             Window length to use in the disjoint spectrogram
-        freq_idxs: list(dim)
-            Which frequency indices to use for each coordinate
+        mag_idxs: list(dim)
+            Which frequency indices to use for each coordinate in the magnitudes
+        phase_idxs: list(>= dim)
+            Which frequency indices to use for storing the scales in the phases
         win: int
             Window length to use in the sliding window power
         fit_lam: float
@@ -145,34 +149,40 @@ class STFTPowerDisjoint(StegoWindowedPower):
         """
         ## Step 1: Compute STFT and setup magnitude 
         self.win_length = win_length
-        self.freq_idxs = freq_idxs
+        self.mag_idxs = mag_idxs
         SX = stft_disjoint(x, win_length)
         self.SXM = np.abs(SX) # Original magnitude
 
         ## Step 2: Setup sliding windows for magnitude components, with target
         ## the shape of the signal
-        target -= np.min(target, axis=0)[None, :]
-        target /= np.max(target)
         StegoSolver.__init__(self, x, target)
-        self.MagSolver = StegoWindowedPower(target, [self.SXM[f, :] for f in freq_idxs], win, fit_lam, q, rescale_targets=rescale_targets, do_viterbi=do_viterbi)
+        self.MagSolver = StegoWindowedPower(target, [self.SXM[f, :] for f in mag_idxs], win, fit_lam, q, rescale_targets=rescale_targets, do_viterbi=do_viterbi)
 
         ## Step 3: Setup solvers phase components, with target a repeated constant
         ## indicating the scale of each component
+        phase_idxs = phase_idxs[0:(len(phase_idxs)//self.dim)*self.dim]
+        self.phase_idxs = phase_idxs
         SXP = np.arctan2(np.imag(SX), np.real(SX))
         self.SXP = SXP
         self.Q = Q
-        SXP = self.SXP[self.freq_idxs, :]
+        SXP = self.SXP[phase_idxs, :]
         inc = 2*np.pi/Q
         PLow = 2*(SXP - inc*np.floor(SXP/inc))/inc
         PHigh = 2*(inc*np.ceil(SXP/inc) - SXP)/inc
         P = np.minimum(PLow, PHigh)
+        target -= np.min(target, axis=0)[None, :]
+        target /= np.max(target)
         scales = 0.5*np.max(target, axis=0) + 0.25
-        scales = scales[None, :]*np.ones((P.shape[1], 1))
-        self.PhaseSolver = StegoWindowedPower(scales, P, 1, fit_lam, q, rescale_targets=False, do_viterbi=False)
+        self.scales_orig = np.array(scales)
+        K = len(phase_idxs)//len(scales)
+        target_scales = np.zeros((P.shape[1], K*len(scales)))
+        for i, scale in enumerate(scales):
+            target_scales[:, i*K:(i+1)*K] = scale
+        self.PhaseSolver = StegoWindowedPower(target_scales, P, 1, 0, q, rescale_targets=False, do_viterbi=False)
 
     def solve(self):
         self.MagSolver.solve(mn=0, mx=np.inf, use_constraints=True)
-        self.PhaseSolver.solve(mn=0, mx=1, use_constraints=True)
+        self.PhaseSolver.solve(mn=0, mx=1, use_constraints=True, verbose_time=False)
     
     def reconstruct_signal(self):
         """
@@ -180,12 +190,12 @@ class STFTPowerDisjoint(StegoWindowedPower):
         """
         ## Step 1: Recover magnitude components
         SXM = np.array(self.SXM)
-        for f, m in zip(self.freq_idxs, self.MagSolver.coeffs):
+        for f, m in zip(self.mag_idxs, self.MagSolver.coeffs):
             SXM[f, :] = m
         
         ## Step 2: Recover phase components
         SXP = np.array(self.SXP)
-        P = np.array(SXP[self.freq_idxs, :])
+        P = np.array(SXP[self.phase_idxs, :])
         X = np.array(self.PhaseSolver.coeffs)
         inc = 2*np.pi/self.Q
         PLow = 2*(P - inc*np.floor(P/inc))/inc # Distance to bin below
@@ -197,7 +207,7 @@ class STFTPowerDisjoint(StegoWindowedPower):
         P[LowDiff < HighDiff] = inc*np.floor(p/inc) + 0.5*inc*X[LowDiff < HighDiff]
         p = P[HighDiff <= LowDiff]
         P[HighDiff <= LowDiff] = inc*np.ceil(p/inc) - 0.5*inc*X[HighDiff <= LowDiff]
-        SXP[self.freq_idxs, :] = P
+        SXP[self.phase_idxs, :] = P
 
         return istft_disjoint(SXM*np.exp(1j*SXP))
     
@@ -208,8 +218,12 @@ class STFTPowerDisjoint(StegoWindowedPower):
         """
         res = self.MagSolver.get_signal(normalize=normalize)
         if normalize:
-            scale = self.PhaseSolver.get_signal(normalize=False)
-            scales = np.median(scale, axis=0)
+            P = self.PhaseSolver.get_signal(normalize=False)
+            K = len(self.phase_idxs)//self.dim
+            scales = np.zeros(self.dim)
+            for i in range(self.dim):
+                pi = P[:, i*K:(i+1)*K].flatten()
+                scales[i] = np.median(pi)
             scales -= 0.25
             scales /= np.max(scales)
             res = res*scales[None, :]
@@ -221,9 +235,9 @@ class STFTPowerDisjoint(StegoWindowedPower):
         if normalize:
             res -= np.min(res, axis=0)[None, :]
             res /= np.max(res, axis=0)[None, :]
-            scales = np.median(self.PhaseSolver.target_orig, axis=0)
+            scales = np.array(self.scales_orig)
             scales -= 0.25
-            scales /= np.max(scales)
+            scales *= 2
             res = res*scales[None, :]
         return res
 
