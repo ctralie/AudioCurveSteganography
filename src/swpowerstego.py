@@ -395,7 +395,7 @@ class STFTPowerDisjointPCA(StegoWindowedPower):
         self.pca = pca
 
         ## Step 2: Setup all aspects of sliding windows
-        StegoWindowedPower.__init__(self, target, Y.T, win, fit_lam, q, -np.inf, np.inf, do_viterbi)
+        StegoWindowedPower.__init__(self, target, Y.T, win, fit_lam, q, do_viterbi=do_viterbi)
 
     
     def reconstruct_signal(self):
