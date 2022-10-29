@@ -64,8 +64,8 @@ if __name__ == '__main__':
         fout.write("{} {}\n".format(tsp_path, get_length(X)))
 
         # Solve for fit
-        for win in [1, 10, 50, 100]:
-            for fit_lam in [0.1, 1, 10]:
+        for win in [1, 2, 4, 8, 16, 32, 64, 128]:
+            for fit_lam in [0.01, 0.1, 1, 10]:
                 for do_viterbi in [False, True]:
                     q = -1
                     max_ratio = 0
@@ -96,7 +96,7 @@ if __name__ == '__main__':
                     os.remove(mp3filename)
                     
                     z_sp = STFTPowerDisjoint(z, X, win_length, freqs, win, fit_lam, q, do_viterbi=do_viterbi)
-                    z_sp.targets = sp.targets
+                    z_sp.MagSolver.targets = sp.MagSolver.targets
                     Y = z_sp.get_signal(normalize=True)
                     snr = get_snr(x, z)
                     distortion = z_sp.get_distortion()[0]

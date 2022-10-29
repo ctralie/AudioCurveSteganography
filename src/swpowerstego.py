@@ -11,7 +11,7 @@ class StegoWindowedPower(StegoSolver):
     """
     A class for doing sliding window power on some nonnegative coefficients
     """
-    def __init__(self, target, coeffs, win, fit_lam=1, q=-1, min_target=0, max_target=np.inf, do_viterbi=True):
+    def __init__(self, target, coeffs, win, fit_lam=1, q=-1, min_target=0, max_target=np.inf, do_viterbi=True, normalize_target=True):
         """
         Parameters
         ----------
@@ -32,10 +32,15 @@ class StegoWindowedPower(StegoSolver):
             Maximum endpoint of target normalization interval
         do_viterbi: boolean
             Whether or not to do viterbi coding to find a better path
+        normalize_target: boolean
+            Whether to normalize the targets to the range of the signal or not
         """
         self.win = win
         self.fit_lam = fit_lam
         self.q = q
+        self.target_orig = np.array(target)
+        self.dim = target.shape[1]
+        assert(self.dim == len(coeffs))
 
         ## Step 2: Setup all aspects of sliding windows
         self.coeffs_orig = [np.array(c) for c in coeffs]
@@ -52,7 +57,8 @@ class StegoWindowedPower(StegoSolver):
             res = Mat.dot(Y)
             res = res[0:M]
             targeti = np.array(target[:, coord])
-            targeti = get_normalized_target(res, targeti, min_target, max_target)
+            if normalize_target:
+                targeti = get_normalized_target(res, targeti, min_target, max_target)
             self.targets.append(targeti)
             csmi = np.abs(targeti[:, None] - res[None, :])
             if csm.size == 0:
@@ -62,18 +68,26 @@ class StegoWindowedPower(StegoSolver):
         self.csm = csm
         self.path = self.reparam_targets(csm, do_viterbi=do_viterbi)
         
-    def solve(self, verbose=0, use_constraints=True):
+    def solve(self, verbose=0, mn=0, mx=np.inf, use_constraints=True):
         """
-        Perform linear least squares to perturb the wavelet coefficients
+        Perform linear least squares to perturb the coefficients
         to best match their targets
+
+        Parameters
+        ----------
+        mn: float
+            Default minimum constraint
+        mx: float
+            Default maximum constraint
+        use_constraints: bool   
+            Whether to use the constraints.  If false, simply perform
+            an unbounded least squares
         """
         M = self.targets[0].size
         for coord in range(self.dim):
             tic = time.time()
             print("Computing target coordinate {} of {}...\n".format(coord+1, self.dim))
             Y = self.coeffs[coord]
-            mn = 0
-            mx = np.inf
             if self.q != -1:
                 eps = np.quantile(Y.flatten(), self.q)
                 mn = np.maximum(0, Y.flatten()-eps)
@@ -104,11 +118,127 @@ class StegoWindowedPower(StegoSolver):
             res = Mat.dot(Y)
             x = res[0:M]
             if normalize:
-                #x = (x-np.mean(x))/np.std(x)
                 x = x - np.min(x)
                 x = x/np.max(x)
             X[:, coord] = x
         return X
+
+
+
+##################################################
+#           NON-OVERLAPPING STFT BASED
+##################################################
+from spectrogramtools import *
+
+class STFTPowerDisjoint(StegoWindowedPower):
+    def __init__(self, x, target, win_length, freq_idxs, win, fit_lam=1, q=-1, do_viterbi=True, Q=4):
+        """
+        Parameters
+        ----------
+        x: ndarray(N)
+            Audio samples
+        target: ndarray(M, dim)
+            Target curve
+        win_length: int
+            Window length to use in the disjoint spectrogram
+        freq_idxs: list(dim)
+            Which frequency indices to use for each coordinate
+        win: int
+            Window length to use in the sliding window power
+        fit_lam: float
+            Weight to put into the fit
+        q: float in [0, 1]
+            Quantile in which to keep magnitudes.
+            If -1, go up to infinity
+        do_viterbi: boolean
+            Whether or not to do viterbi coding to find a better path
+        Q: int
+            Use 2*pi/Q range to store each phase encoded component
+        """
+        ## Step 1: Compute STFT and setup magnitude 
+        self.win_length = win_length
+        self.freq_idxs = freq_idxs
+        SX = stft_disjoint(x, win_length)
+        self.SXM = np.abs(SX) # Original magnitude
+
+        ## Step 2: Setup sliding windows for magnitude components, with target
+        ## the shape of the signal
+        target -= np.min(target, axis=0)[None, :]
+        target /= np.max(target)
+        StegoSolver.__init__(self, x, target)
+        self.MagSolver = StegoWindowedPower(target, [self.SXM[f, :] for f in freq_idxs], win, fit_lam, q, do_viterbi=do_viterbi)
+
+        ## Step 3: Setup solvers phase components, with target a repeated constant
+        ## indicating the scale of each component
+        SXP = np.arctan2(np.imag(SX), np.real(SX))
+        self.SXP = SXP
+        self.Q = Q
+        SXP = self.SXP[self.freq_idxs, :]
+        inc = 2*np.pi/Q
+        PLow = 2*(SXP - inc*np.floor(SXP/inc))/inc
+        PHigh = 2*(inc*np.ceil(SXP/inc) - SXP)/inc
+        P = np.minimum(PLow, PHigh)
+        scales = 0.5*np.max(target, axis=0) + 0.25
+        scales = scales[None, :]*np.ones((P.shape[1], 1))
+        self.PhaseSolver = StegoWindowedPower(scales, P, 1, fit_lam, q, do_viterbi=False, normalize_target=False)
+
+    def solve(self):
+        self.MagSolver.solve(mn=0, mx=np.inf, use_constraints=True)
+        self.PhaseSolver.solve(mn=0, mx=1, use_constraints=True)
+    
+    def reconstruct_signal(self):
+        """
+        Return the 1D time series after inverting the STFT
+        """
+        ## Step 1: Recover magnitude components
+        SXM = np.array(self.SXM)
+        for f, m in zip(self.freq_idxs, self.MagSolver.coeffs):
+            SXM[f, :] = m
+        
+        ## Step 2: Recover phase components
+        SXP = np.array(self.SXP)
+        P = np.array(SXP[self.freq_idxs, :])
+        X = np.array(self.PhaseSolver.coeffs)
+        inc = 2*np.pi/self.Q
+        PLow = 2*(P - inc*np.floor(P/inc))/inc # Distance to bin below
+        PHigh = 2*(inc*np.ceil(P/inc) - P)/inc # Distance to bin above
+        LowDiff = np.abs(X-PLow)
+        HighDiff = np.abs(X-PHigh)
+
+        p = P[LowDiff < HighDiff]
+        P[LowDiff < HighDiff] = inc*np.floor(p/inc) + 0.5*inc*X[LowDiff < HighDiff]
+        p = P[HighDiff <= LowDiff]
+        P[HighDiff <= LowDiff] = inc*np.ceil(p/inc) - 0.5*inc*X[HighDiff <= LowDiff]
+        SXP[self.freq_idxs, :] = P
+
+        return istft_disjoint(SXM*np.exp(1j*SXP))
+    
+    def get_signal(self, normalize=True):
+        """
+        Reconstruct the magnitude components and scale them by the 
+        average phases
+        """
+        res = self.MagSolver.get_signal(normalize=normalize)
+        if normalize:
+            scale = self.PhaseSolver.get_signal(normalize=False)
+            scales = np.median(scale, axis=0)
+            scales -= 0.25
+            scales /= np.max(scales)
+            res = res*scales[None, :]
+        return res
+
+    def get_target(self, normalize=True):
+        res = self.MagSolver.targets
+        res = np.array(res).T
+        if normalize:
+            res -= np.min(res, axis=0)[None, :]
+            res /= np.max(res, axis=0)[None, :]
+            scales = np.median(self.PhaseSolver.target_orig, axis=0)
+            scales -= 0.25
+            scales /= np.max(scales)
+            res = res*scales[None, :]
+        return res
+
 
 
 ##################################################
@@ -190,56 +320,9 @@ class WaveletCoeffs(StegoWindowedPower):
         return y
 
 
-
 ##################################################
-#           NON-OVERLAPPING STFT BASED
+#     NON-OVERLAPPING COMPLEX STFT PCA-BASED
 ##################################################
-from spectrogramtools import *
-
-class STFTPowerDisjoint(StegoWindowedPower):
-    def __init__(self, x, target, win_length, freq_idxs, win, fit_lam=1, q=-1, do_viterbi=True):
-        """
-        Parameters
-        ----------
-        x: ndarray(N)
-            Audio samples
-        target: ndarray(M, dim)
-            Target curve
-        win_length: int
-            Window length to use in the disjoint spectrogram
-        freq_idxs: list(dim)
-            Which frequency indices to use for each coordinate
-        win: int
-            Window length to use in the sliding window power
-        fit_lam: float
-            Weight to put into the fit
-        q: float in [0, 1]
-            Quantile in which to keep magnitudes.
-            If -1, go up to infinity
-        do_viterbi: boolean
-            Whether or not to do viterbi coding to find a better path
-        """
-        StegoSolver.__init__(self, x, target)
-        ## Step 1: Compute STFT
-        self.win_length = win_length
-        self.freq_idxs = freq_idxs
-        SX = stft_disjoint(x, win_length)
-        self.SXM = np.abs(SX) # Original magnitude
-        self.SXP = np.arctan2(np.imag(SX), np.real(SX))
-
-        ## Step 2: Setup all aspects of sliding windows
-        StegoWindowedPower.__init__(self, target, [self.SXM[f, :] for f in freq_idxs], win, fit_lam, q, do_viterbi=do_viterbi)
-
-    
-    def reconstruct_signal(self):
-        """
-        Return the 1D time series after inverting the STFT
-        """
-        SXM = np.array(self.SXM)
-        for f, m in zip(self.freq_idxs, self.coeffs):
-            SXM[f, :] = m
-        return istft_disjoint(SXM*np.exp(1j*self.SXP))
-
 
 def get_rotated_distortion(Y, Z, flip, theta):
     """
