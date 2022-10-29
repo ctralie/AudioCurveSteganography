@@ -211,29 +211,6 @@ def get_window_energy(x, win, hop=1):
     eng = np.cumsum(np.concatenate(([0], x**2)))
     return eng[win::hop]-eng[0:-win:hop]
 
-def get_normalized_target(x, target, min_freq=1, max_freq=2, stdev=2):
-    """
-    Normalize the target to the range of the centroid
-
-    x: ndarray(N)
-        Original Signal
-    target: ndarray(T >= N)
-        Target signal
-    min_freq: int
-        Minimum frequency index to use
-    max_freq: int
-        One beyond the maximum frequency index to use
-    stdev: float
-        How many standard deviations to fit
-    """
-    xrg = stdev*np.std(x)
-    xmu = np.mean(x)
-    xmin = max(min_freq, xmu-xrg)
-    xmax = min(max_freq, xmu+xrg)
-    target -= np.min(target)
-    target /= np.max(target)
-    return xmin + target*(xmax-xmin)
-
 @jit(nopython=True)
 def viterbi_loop_trace(csm, K):
     """
@@ -296,7 +273,6 @@ def get_best_target(X, Y, K):
 
     min_path = np.arange(Y.shape[0]) % X.shape[0]
     min_cost = costfn(X[min_path, :])
-    print("Default cost", min_cost)
 
     # Try default orientation
     csm = np.abs(X[:, 0][:, None] - Y[:, 0][None, :])
@@ -304,7 +280,6 @@ def get_best_target(X, Y, K):
     path = viterbi_loop_trace(csm, K)
     path = np.array(path, dtype=int)
     cost = costfn(X[path, :])
-    print("Cost", cost)
     if cost < min_cost:
         min_cost = cost
         min_path = path
@@ -315,9 +290,7 @@ def get_best_target(X, Y, K):
     path = viterbi_loop_trace(csm, K)
     path = X.shape[0]-1-np.array(path, dtype=int)
     cost = costfn(X[path, :])
-    print("Reverse cost", cost)
     if cost < min_cost:
-        print("Reverse wins!")
         min_cost = cost
         min_path = path
 
@@ -412,29 +385,54 @@ class StegoSolver:
         print("viterbi_K = ", viterbi_K)
         return path
 
-    def reparam_targets(self, csm, K=-1, do_viterbi=True):
+    def setup_targets(self, signals, rescale_targets, do_viterbi=True, K=-1):
         """
-        Re-parameterize a bunch of targets to fit their 
+        Rescale and re-parameterize a bunch of targets to fit their 
         associated signals
 
         Parameters
         ----------
-        csm: ndarray(target_len, signal_len)
-            Cross-similarity matrix between targets and signals
+        signals: list of ndarray(N)
+            Signals to match
+        rescale_targets: bool
+            If true, solve for a and be to best match signals_i = a*targets_i+b
+        do_viterbi: bool
+            Whether to do Viterbi to find a better path
         K: int
             K to use with Viterbi.  If -1, loop through until
             the path goes through at least one cycle
         """
+        M = len(self.targets[0])
+        N = len(signals[0])
+        ## Step 1: Setup initial path and do initial rescaling
         path = []
+        if rescale_targets:
+            skip = int(np.ceil(M/N))
+            path = np.mod(skip*np.arange(N), M)
+            diff = 0
+            for i, (target, signal) in enumerate(zip(self.targets, signals)):
+                a = np.std(signal)/np.std(target[path])
+                b = np.mean(signal-a*self.targets[i][path])
+                self.targets[i] = a*self.targets[i] + b
+                diff += np.sum((target[path]-signal)**2)
+            print("Diff Before Viterbi", diff)
         if do_viterbi:
+            csm = np.zeros((M, N))
+            for target, signal in zip(self.targets, signals):
+                csmi = target[:, None] - signal[None, :]
+                csm += csmi**2
             path = self.get_viterbi_path(csm, K)
-        else:
-            # If not doing viterbi, go through at a constant 
-            # interval equal to ceil(target_length / signal_length)
-            skip = int(np.ceil(csm.shape[0]/csm.shape[1]))
-            path = np.mod(skip*np.arange(csm.shape[1]), csm.shape[0])
-        self.targets = [t[path] for t in self.targets]
-        return path
+            if rescale_targets:
+                diff = 0
+                for i, (target, signal) in enumerate(zip(self.targets, signals)):
+                    a = np.std(signal)/np.std(target[path])
+                    b = np.mean(signal-a*self.targets[i][path])
+                    self.targets[i] = a*self.targets[i] + b
+                    diff += np.sum((target[path]-signal)**2)
+                print("Diff After Viterbi", diff)
+        if len(path) > 0:
+            self.targets = [t[path] for t in self.targets]
+        self.path = path
 
     def reparam_targets_multi(self, csm, K=-1):
         """
