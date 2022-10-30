@@ -4,5 +4,6 @@ results/PCA/*.txt
 data/turksamples/*.png
 data/turksamples/*.txt
 data/turksamples/*.mp3
+data/turksamples/*.json
 notebooks/*.png
 notebooks/*.mp3
