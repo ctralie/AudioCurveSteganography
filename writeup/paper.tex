@@ -1,0 +1,183 @@
+% This is samplepaper.tex, a sample chapter demonstrating the
+% LLNCS macro package for Springer Computer Science proceedings;
+% Version 2.20 of 2017/10/04
+%
+\documentclass[runningheads]{llncs}
+%
+\usepackage{cite,url,amsfonts}
+\usepackage{algorithm}% http://ctan.org/pkg/algorithms
+\usepackage{algpseudocode}% http://ctan.org/pkg/algorithmicx
+\usepackage{mathtools}
+\usepackage{graphicx}
+\usepackage{color}
+% Used for displaying a sample figure. If possible, figure files should
+% be included in EPS format.
+%
+% If you use the hyperref package, please uncomment the following line
+% to display URLs in blue roman font according to Springer's eBook style:
+% \renewcommand\UrlFont{\color{blue}\rmfamily}
+
+\graphicspath{{figs/}, {../figures/}}
+
+\begin{document}
+%
+\title{Artistic Curve Steganography with Musical Audio As A Carrier}
+%
+%\titlerunning{Abbreviated paper title}
+% If the paper title is too long for the running head, you can set
+% an abbreviated paper title here
+%
+\author{First Author\inst{1}\orcidID{0000-1111-2222-3333}}
+%
+\authorrunning{F. Author et al.}
+% First names are abbreviated in the running head.
+% If there are more than two authors, 'et al.' is used.
+%
+\institute{Princeton University, Princeton NJ 08544, USA 
+\email{lncs@springer.com}}
+%
+\maketitle              % typeset the header of the contribution
+%
+\begin{abstract}
+The abstract should briefly summarize the contents of the paper in
+15--250 words.
+
+\keywords{Steganography, Traveling Salesperson Art, Hidden Signals}
+\end{abstract}
+%
+%
+%
+\section{Introduction}
+
+
+
+Our goals and design constraints are as follows:
+\begin{enumerate}
+    \item The hidden data should be audibly imperceptible (though it does not need to be statistically imperceptible)
+    \item The hidden data should be robust to compression
+    \item It should be possible to decode the data without any prior knowledge/keys
+    \item The hidden data should be robust to frame misalignment, or it should be possible to recover a frame alignment without any prior information
+\end{enumerate}
+
+
+\subsection{Prior Work in Audio Steganography}
+
+\section{Traveling Salesperson Art}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\columnwidth]{TSPTour.png}
+  \caption{Our modified pipeline for creating TSP art.  Color on the tour indicates phase along the loop.}
+  \label{fig:TSPTour}
+\end{figure}
+
+Traveling Salesperson (TSP) art \cite{bosch2004continuous, kaplan2005tsp,bosch2008connecting} is an automated artistic line drawing pipeline which computes a {\em simple closed loop} to approximate a source image.  ``Simple'' in this context does not imply a lack of complexity; rather, it means that a curve does not intersect itself (see, for example, the Jordan Curve Theorem \cite{bosch2009jordan}).  To construct such a curve, a collection of dots in the plane are first placed in a ``stipple pattern'' to approximate brightness in the image (e.g. more dots concentrate in darker regions), and then they are connected in a loop via an approximate traveling salesperson (TSP) tour.  Figure~\ref{fig:TSPTour} shows an example.  We follow the TSP Art technique of \cite{kaplan2005tsp}, with a few modifications, as described below.
+
+
+\subsection{Voronoi Stippling}
+\label{sec:stippling}
+
+\begin{algorithm}
+  \caption{Modified Weighted Voronoi Stippling \cite{secord2002weighted}}
+  \begin{algorithmic}[1]
+    \Procedure{VoronoiStipple}{$G$, $N$, $b$, $\sigma$, $f$}
+    \Comment{Grayscale image $G$, $N$ target points, brightness threshold $b$, Canny edge scale $\sigma$, density factor $f$}
+    \State $W_{ij} \gets \min(I_{ij}, b)$
+    \State $W_{ij} \gets W_{ij} - \min(W)$
+    \State $W_{ij} \gets 1 - W_{ij} / \max(W)$
+    \State $C \gets \text{canny}_{\sigma}(I)$ \Comment{1 if on canny edge, 0 otherwise}
+    \State $W_{ij} \gets \max(W_{ij}, C_{ij})$
+    \State  Sample $N$ random points $X \in \mathbb{R}^{N \times 2}$ by density according to $W$
+    \For{$k = 1:10$} \Comment{Lloyd's relaxation iterations}
+        \State \begin{equation}
+          X_i \gets \frac{ \sum_{(i, j) \in A_i} W_{ij} * (i, j) }{\sum_{(i, j) \in A_i} W_{ij}}
+        \end{equation}
+        \Comment{Where $A_i$ is the Voronoi region for point $X_i$}
+    \EndFor \\
+    \State Remove top $N(1-f)$ points from $X$ with furthest distance to their nearest neighbors \\
+    \Return $X$
+    \EndProcedure
+  \end{algorithmic}
+  \label{alg:voronoistipple}
+\end{algorithm}
+
+%\begin{algorithm}
+%  \caption{2-Opt Approximate TSP Tour \cite{johnson1997traveling}}
+%  \begin{algorithmic}[1]
+%    \Procedure{TSP2Opt}{$X$}
+%    \Comment{$X \in \mathbb{R}^{N \times 2}$ is a 2D point cloud}
+%    \State Let $T$ be a minimum spanning tree of $X$
+%    \State Let $tour$ be indices into $X$ in the order that a depth-first search visits $T$, starting at an arbitrary point
+%    \While{There exits a swappable $i > 1$, $j > i$}
+%      \State Reverse indices in $tour$ in $[i+1, j]$
+%    \EndWhile \\
+%    \EndProcedure
+%  \end{algorithmic}
+%  \label{alg:twoopt}
+%\end{algorithm}
+
+The first step in TSP art is to generate a stipple pattern $X$ to best approximate a grayscale image $G$.  Following the authors of \cite{kaplan2005tsp}, we use Secord's technique for Voronoi stippling \cite{secord2002weighted}.  This consists taking an initial sample of points according to some density weights $W$ and then repeatedly moving them closer the weighted centroid of their Voronoi regions (an instance of Lloyd's algorithm) so that they are spread more evenly and look less ``noisy.''  Secord \cite{secord2002weighted} takes the weight $W_{ij}$ at a pixel to be inversely proportional to its brightness, using a weight of $0$ above some brigtness threshold $b$.  This leads more dots to concentrate in darker regions; however, the algorithm may fail to sample any dots along important edges between brighter regions (the authors of \cite{li2011structure} also observed this).   To ameliorate this, we run a Canny edge detector \cite{canny1986computational} on the original image and set the weight of any pixels along an edge to be 1, so that the final weights promote samples both in darker regions and along edges of any kind.  We find this is addition is particularly helpful for line drawings, including images with text (e.g. Figure~\ref{fig:GoldenSectionsFM}).  Finally, we include the option to filter out points by density to clean up the stipple before the next step.  Algorithm~\ref{alg:voronoistipple} provides more details.
+
+\subsection{Traveling Salesperson Tours}
+\label{sec:tsp}
+One a stipple has been established, the next step in TSP art is to ``connect the dots'' with a closed loop that visits each stipple point exactly once.  A loop with these properties is otherwise known as a {\em Hamiltonian cycle} on a complete graph over the points, though we'll refer to this simply as a ``tour.''  A well known objective function for a tour that doesn't ``jump too much'' is the total distance traveled, or the sum of all edge lengths, and a tour that achieves the optimum is known as a {\em traveling salesperson (TSP) tour}.  Since the TSP problem is NP-hard, the authors of  \cite{kaplan2005tsp} use the Concorde TSP solver \cite{applegate2001concorde} for an approximate solution. We opt for a simpler, technique that first creates a 2-approximation of a TSP from a depth-first traversal through the minimum spanning tree of the stipple dots, which is a already a 2-approximation of the optimal tour.  We then iteratively improve on this tour via a sequence of 2-opt relaxations \cite{johnson1997traveling}; that is, if for some $i > 1, i < j < N$ the distances between the 4 points $X_i, X_{i+1}, X_j$, and $X_{j+1}$ satisfy
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.5\columnwidth]{2Opt.pdf}
+  \caption{Every crossing in a tour can be removed with a 2-opt swap to yield a tour of a smaller distance, since, by the triangle inequality, $d(X_i, X_j) + d(X_{i+1}, X_{j+1}) < (a+d) + (b+c) = d(X_i, X_{i+1}) + d(X_j, X_{j+1})$.  This may introduce new crossings (shown in red), but these and other crossings will be resolved in future 2-opt swaps.}
+  \label{fig:TwoOpt}
+\end{figure}
+
+\begin{equation}
+  d(X_i, X_j) + d(X_{i+1}, X_{j+1}) < d(X_i, X_{i+1}) + d(X_j, X_{j+1})
+\end{equation}
+
+then it is possible to perform a swap to yield a new tour with a smaller distance.  This amounts to reversing the indices in the tour between index $i+1$ and $j$, inclusive.  We repeat this step as long as such a swap is still possible.  Though this is not guaranteed to yield an optimal TSP tour, it does produce tours which are simple; that is, every crossing is removed (Figure~\ref{fig:TwoOpt}).
+
+
+\subsection{Curvature Shortening Flow}
+
+
+\section{Hamiltonian Paths on Watertight Triangle Meshes}
+
+
+
+\section{Curve Embedding in Audio}
+
+\subsection{Overall Formulation}
+
+Let $T = (T_1, T_2, \hdots, T_N \}$ the desired Euclidean ``target'' point sequence to embed, where each $T_i \in \mathbb{R}^d$, and let $x$ be a set of $N$ audio samples which will serve as a carrier.  The goal is to perturb the samples of $x$ so that some function of $x$ matches $T$ as closely as possible.  
+
+
+\subsection{Re-Parameterizing Targets for Better Fits}
+
+
+\subsection{Recovering Component Scales}
+
+
+\subsection{Recovering Frame Alignments}
+
+
+
+\section{Experiments}
+
+
+\subsection{Listening Experiment}
+
+We ask questions similar to the authors of \cite{cvejic_wavelet_2002}.
+
+\section{Discussion}
+
+%
+% ---- Bibliography ----
+%
+% BibTeX users should specify bibliography style 'splncs04'.
+% References will then be sorted and formatted in the correct style.
+%
+\bibliographystyle{splncs04}
+\bibliography{paper}
+%
+
+\end{document}
+
