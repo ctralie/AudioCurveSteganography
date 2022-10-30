@@ -21,7 +21,7 @@
 
 \begin{document}
 %
-\title{Artistic Curve Steganography with Musical Audio As A Carrier}
+\title{Artistic Curve Steganography Carried by Musical Audio}
 %
 %\titlerunning{Abbreviated paper title}
 % If the paper title is too long for the running head, you can set
@@ -54,7 +54,7 @@ The abstract should briefly summarize the contents of the paper in
 Our goals and design constraints are as follows:
 \begin{enumerate}
     \item The hidden data should be audibly imperceptible (though it does not need to be statistically imperceptible)
-    \item The hidden data should be robust to compression
+    \item The hidden data should be faithfully preserved and {\em robust to compression}
     \item It should be possible to decode the data without any prior knowledge/keys
     \item The hidden data should be robust to frame misalignment, or it should be possible to recover a frame alignment without any prior information
 \end{enumerate}
@@ -149,35 +149,43 @@ then it is possible to perform a swap to yield a new tour with a smaller distanc
 
 \subsection{Overall Formulation}
 
-Let $T = (T_1, T_2, \hdots, T_N \}$ the desired Euclidean target point sequence to hide, where each $T_i \in \mathbb{R}^d$, and let $x$ be a set of $N$ audio samples which will serve as a carrier.  The goal is to perturb the samples of $x$ so that some function of $x$ matches $T$ as closely as possible.  The function we choose is based on a ``time regularized'' version of the magnitude Short-Time Fourier Transform (STFT) which we call a {\em sliding window sum} STFT (SWS-STFT).  As a first step, we compute a {\em non-overlapping} short-time Fourier Transform based on a chosen window length $w$:
+Let $T = (T_1, T_2, \hdots, T_N \}$ the desired Euclidean target point sequence to hide, where each $T_i \in \mathbb{R}^d$, and let $x$ be a set of $N$ audio samples which will serve as a carrier.  The goal is to perturb the samples of $x$ so that some function of $x$ matches $T$ as closely as possible.  The function we choose is based on a ``time regularized'' version of the magnitude Short-Time Fourier Transform (STFT) which we call a {\em sliding window sum} STFT (SWS-STFT).  As a first step, we compute a {\em non-overlapping} short-time Fourier Transform $S$ based on a chosen window length $w$ with a total of $N$ frames:
 
 \begin{equation}
-  S_{j, k} = \sum_{n = 0}^w x_{jw + n} e^{-i 2 \pi k n / w}
+  S_{j, k} = \left( \sum_{n = 0}^w x_{jw + n} e^{-i 2 \pi k n / w} \right) = M_{j, k} e^{i P_{j, k}}
 \end{equation}
 
-with a total of $N$ frames.  Then, given a second window length $\ell$, we compute the following {\em sliding window sum} $X$ of the magnitudes of $|S_{j, k}|$
+and we factor $S$ it into its magnitude and phase components $M$ and $P$, respectively.  Then, given a second window length $\ell$, we compute the following {\em sliding window sum} $X$ of the magnitudes of $S$
 
 \begin{equation}
-  X_{j, k} = \sum_{n = 0}^{\ell-1} |S_{j+n, k}|
+  X_{j, k} = \sum_{n = 0}^{\ell-1} M_{j+n, k}
 \end{equation}
 
+In this way, $X$ has $N-\ell+1$ samples.  Let's assume momentarily that $T$ has exactly this many samples; we will address the general case in Section~\ref{sec:reparam}.  We also chose to hide each coordinate in a single frequency bin $k$; we'll index each dimension $i$'s frequency bin as $k_i$.  Then our goal is to find a perturbed version of the magnitudes, $\hat{M}$.  We minimize the following objective function one coordinate dimension $k = 1, ... d$ at a time:
+
+\begin{equation}
+  \label{eq:objfn}
+  f_k(\hat{M}) = \sum_{j=1}^{N-\ell+1} \left( \left( \sum_{n = 0}^{\ell-1} M_{j+n, k} \right) - T_{j, k} \right)^2 + \lambda \sum_{j=1}^N \left( M_{j, k} - \hat{M}_{j, k} \right)^2
+\end{equation}
+
+subject to .  This can be formulated as a sparse nonnegative least squares problem.  Though Equation~\ref{eq:objfn} suggest an $O(N \ell)$ time complexity, the linear operator and its adjoint can be implemented with a number of operations proportional to $N$ only, and independent of $\ell$, using the 1D version of the ``summed area tables'' trick in computer vision \cite{lewisfast}; that is, if we let 
 
 
-
-nonnegative least squares
+\subsubsection{Target Rescaling}
 
 A crucial step to keep the hidden signal imperceptible is to rescale the targets to match the dynamic range of the signals.  Unfortunately, we lose relative scale information between the components, but we will explain how to store and recover this in Section~\ref{sec:componentscales}
 
 
 \subsubsection{The choice of non-overlapping windows}
-Though some other works use transforms with overlapping windows (e.g. \cite{hwan_sik_yun_acoustic_2010}), we find that changing different STFT bins independently can lead to STFTs that do not correspond to any real signal due to discrepancies between overlapping windows.  An algorithm like Griffin-Lim \cite{griffin1984signal} can recover a signal whose spectrogram has a locally minimal distance to the perturbed STFT, but we find that this step introduces an unacceptable level of distortion both in the target and the carrier audio.  This problem occurs even for real-valued transforms such as the Discrete Cosine Transform (which was used by \cite{geleta_pixinwav_2021}).  We sidestep this problem completely by using non-overlapping windows as in \cite{xiaoxiao_dong_data_2004}.  
+Though some other works use transforms with overlapping windows (\cite{hwan_sik_yun_acoustic_2010,geleta_pixinwav_2021}), we find that changing different STFT bins independently can lead to STFTs that do not correspond to any real signal due to discrepancies between overlapping windows.  An algorithm like Griffin-Lim \cite{griffin1984signal} can recover a signal whose spectrogram has a locally minimal distance to the perturbed STFT, but we find that this step introduces an unacceptable level of distortion both in the target and the carrier audio.  This problem occurs even for real-valued transforms such as the Discrete Cosine Transform (which was used by \cite{geleta_pixinwav_2021}).  We sidestep this problem completely by using non-overlapping windows as in \cite{xiaoxiao_dong_data_2004}.  
 
-The main downside of non-overlapping windows is that they lead to fewer STFT frames.  For instance, for a 30 second audio clip at 44100hz using a window length of 1024, we are limited to about 1292 frames, which is half of what we would get using an overlapping STFT with a hop length of 512.  However, a quick thought experiment shows that this is still a reasonable rate.  Suppose that we use a sliding window length $\ell=16$, for a total of 1277 carrier samples.  Suppose also that the precision of our embedding of a 2D plane curve is roughly on par with an 8 bit per coordinate quantization in a more traditional binary encoding scheme.  Then the total number of bits transmitted over 30 seconds is $1277 \times 8 \times 2$, or about 681 bits/second.  This number jumps to about 1022 bits/second for a 3D curve.  These numbers are on part with other recent techniques that are designed to be robust to noise (e.g. 900 bits/second in the OFDM technique of \cite{eichelberger_receiving_2019}).
+The main downside of non-overlapping windows is that they lead to fewer STFT frames.  For instance, for a 30 second audio clip at 44100hz using a window length of 1024, we are limited to about 1292 frames, which is half of what we would get using an overlapping STFT with a hop length of 512.  However, a quick thought experiment shows that this is still a reasonable data rate.  Suppose that we use a sliding window length $\ell=16$, for a total of 1277 carrier samples.  Suppose also that the precision of our embedding of a 2D plane curve is roughly on par with an 8 bit per coordinate quantization in a more conventional binary encoding scheme.  Then the total number of bits transmitted over 30 seconds is $1277 \times 8 \times 2$, or about 681 bits/second.  This number jumps to about 1022 bits/second for a 3D curve.  These numbers are on part with other recent techniques that are designed to be robust to noise (e.g. 900 bits/second in the OFDM technique of \cite{eichelberger_receiving_2019}).  Furthermore, our equivalent of a ``bit error'' is additive coordinate noise,and the target can still be visible with some amount of such noise.
 
 
 
 
 \subsection{Re-Parameterizing Targets for Better Fits}
+\label{sec:reparam}
 
 In general, the SWS-STFT sequence $X$ will not have the same number of samples as the target $T$.  If we stick to scenarios where $T$ has more samples, we can index $X$ by a default function 
 
