@@ -61,6 +61,8 @@ Our goals and design constraints are as follows:
 
 Satisfying goals 1 and 2 simultaneously is the biggest challenge of this work.
 
+Pipeline is simple enough that we have very good intuition for how it's working, and we validate its performance in Section~\ref{sec:experiments}.
+
 
 \subsection{Prior Work in Audio Steganography}
 
@@ -202,6 +204,14 @@ As a rule of thumb, we find that having a target curve with about 1.5-2x as many
 We use the technique presented by the authors of \cite{xiaoxiao_dong_data_2004} to recover the scales of each component.
 
 \subsection{Recovering Frame Alignments}
+
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\columnwidth]{OptimalShift.pdf}
+  \caption{Curve length can be used as a proxy for distortion.}
+  \label{fig:TSPTour}
+\end{figure}
 
 
 

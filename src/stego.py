@@ -415,7 +415,7 @@ class StegoSolver:
                 b = np.mean(signal-a*self.targets[i][path])
                 self.targets[i] = a*self.targets[i] + b
                 diff += np.sum((target[path]-signal)**2)
-            print("Diff Before Viterbi", diff)
+            #print("Diff Before Viterbi", diff)
         if do_viterbi:
             csm = np.zeros((M, N))
             for target, signal in zip(self.targets, signals):
@@ -429,7 +429,7 @@ class StegoSolver:
                     b = np.mean(signal-a*self.targets[i][path])
                     self.targets[i] = a*self.targets[i] + b
                     diff += np.sum((target[path]-signal)**2)
-                print("Diff After Viterbi", diff)
+                #print("Diff After Viterbi", diff)
         if len(path) > 0:
             self.targets = [t[path] for t in self.targets]
         self.path = path
