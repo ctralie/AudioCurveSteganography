@@ -218,12 +218,29 @@ We use the technique presented by the authors of \cite{xiaoxiao_dong_data_2004} 
 \section{Experiments}
 \label{sec:experiments}
 
+Below we assess the performance of our system on an extensive set of tests
 
-\subsection{Listening Experiment}
+Show caltech-101 and meshseg examples
+
+\subsection{Quantitative Metrics}
+
+\subsection{Subjective Listening Experiment}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.8\columnwidth]{Turk.pdf}
+  \caption{Results of the listening experiment on the Amazon Mechanical Turk}
+  \label{fig:TurkResults}
+\end{figure}
+
 
 We can actually get higher SNRs using frequencies that are more audible
 
 We ask questions similar to the authors of \cite{bassia2001robust}.
+
+46 unique Turkers, 21 of whom participated in at least 40 rankings.
+
+Figure~\ref{fig:TurkResults} shows the results.  Mean opinion scores are correlated with $\lambda$, but there's not much of a difference between $\lambda=0.1$ and $\lambda=1$, which suggests using the former as a rule of thumb due to its lower geometric distortion.
 
 \section{Discussion}
 

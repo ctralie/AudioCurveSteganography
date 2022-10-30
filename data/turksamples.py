@@ -34,6 +34,7 @@ if __name__ == '__main__':
     tsp_paths = sorted(tsp_paths)
     tsp_paths = [tsp_paths[i] for i in np.random.permutation(len(tsp_paths))]
     tsp_path = tsp_paths[audio_idx]
+    print(tsp_path)
 
     ## Step 4: Do embedding and create audio clip
     X = sio.loadmat(tsp_path)["X"]
