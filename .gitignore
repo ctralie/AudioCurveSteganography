@@ -1,5 +1,8 @@
 results/LowFreq/*.txt
 results/LowFreq2/*.txt
 results/PCA/*.txt
+data/turksamples/*.png
+data/turksamples/*.txt
+data/turksamples/*.mp3
 notebooks/*.png
 notebooks/*.mp3

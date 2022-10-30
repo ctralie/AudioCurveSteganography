@@ -163,14 +163,14 @@ and we factor $S$ it into its magnitude and phase components $M$ and $P$, respec
   X_{j, k} = \sum_{n = 0}^{\ell-1} M_{j+n, k}
 \end{equation}
 
-In this way, $X$ has $N-\ell+1$ samples.  Let's assume momentarily that $T$ has exactly this many samples; we will address the general case in Section~\ref{sec:reparam}.  We also chose to hide each coordinate in a single frequency bin $k$; we'll index each dimension $i$'s frequency bin as $k_i$.  Then our goal is to find a perturbed version of the magnitudes, $\hat{M}$.  We minimize the following objective function one coordinate dimension $k = 1, ... d$ at a time:
+In this way, $X$ has $N-\ell+1$ samples.  Let's assume momentarily that $T$ has exactly this many samples; we will address the case where $len(T) > N-\ell+1$ in Section~\ref{sec:reparam}.  We also chose to hide each coordinate in a single frequency bin $k$; we'll index each dimension $i$'s frequency bin as $k_i$.  Then our goal is to find a perturbed version of the magnitudes, $\hat{M}$.  We minimize the following objective function one coordinate dimension $k = 1, ... d$ at a time:
 
 \begin{equation}
   \label{eq:objfn}
   f_k(\hat{M}) = \sum_{j=1}^{N-\ell+1} \left( \left( \sum_{n = 0}^{\ell-1} M_{j+n, k} \right) - T_{j, k} \right)^2 + \lambda \sum_{j=1}^N \left( M_{j, k} - \hat{M}_{j, k} \right)^2
 \end{equation}
 
-subject to .  This can be formulated as a sparse nonnegative least squares problem.  Though Equation~\ref{eq:objfn} suggest an $O(N \ell)$ time complexity, the linear operator and its adjoint can be implemented with a number of operations proportional to $N$ only, and independent of $\ell$, using the 1D version of the ``summed area tables'' trick in computer vision \cite{lewisfast}; that is, if we let 
+subject to .  This can be formulated as a sparse nonnegative least squares problem.  Though Equation~\ref{eq:objfn} suggest an $O(N \ell)$ time complexity to evaluate the objective function, the linear operator and its adjoint can be implemented with a number of operations proportional to $N$ only, and independent of $\ell$, using the 1D version of the ``summed area tables'' trick in computer vision \cite{lewisfast}; that is, if we let 
 
 
 \subsubsection{Target Rescaling}
@@ -221,7 +221,9 @@ We use the technique presented by the authors of \cite{xiaoxiao_dong_data_2004} 
 
 \subsection{Listening Experiment}
 
-We ask questions similar to the authors of \cite{cvejic_wavelet_2002}.
+We can actually get higher SNRs using frequencies that are more audible
+
+We ask questions similar to the authors of \cite{bassia2001robust}.
 
 \section{Discussion}
 
