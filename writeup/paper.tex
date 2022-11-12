@@ -192,7 +192,7 @@ and we factor $S$ it into its magnitude and phase components $M$ and $P$, respec
   \text{SWS}_{\ell}\left({M_k}\right)_j = \sum_{n = 0}^{\ell-1} M_{k, j+n}
 \end{equation}
 
-The effect of $\ell$ is to smooth out the noisy time series at each row $k$ of the magnitude spectrogram so that the rows in the SW-STFT match smoother transitions in the target curves.  The resulting time series $\text{SWS}_{\ell}\left({M_k}\right)$ has $N-\ell+1$ samples.  Let's assume momentarily that $T$ has exactly this many samples; we will address the case where $len(T) > N-\ell+1$ in Section~\ref{sec:reparam}.  We seek a perturbed version of the magnitudes, $\hat{M}$ so that each coordinate $i$ is hidden in a single frequency index $k_i$ of $\hat{M}$.  To that end, we minimize the following objective function, one coordinate dimension $i = 1, ... d$ at a time:
+The effect of $\ell$ is to smooth out the noisy time series at each row $k$ of the magnitude spectrogram so that the rows in the SW-STFT match smoother transitions in the target curves.  The resulting time series $\text{SWS}_{\ell}\left({M_k}\right)$ has $N-\ell+1$ samples.  Let's assume momentarily that $T$ has exactly this many samples; we will address the case where $len(T) > N-\ell+1$ in Section~\ref{sec:reparam}.  We then seek a perturbed version of the magnitudes, $\hat{M}$ so that each coordinate $i$ is hidden in a single frequency index $k_i$ of $\hat{M}$.  To that end, we minimize the following objective function, one coordinate dimension $i = 1, ... d$ at a time:
 
 \begin{equation}
   \label{eq:objfn}
@@ -204,14 +204,14 @@ The effect of $\ell$ is to smooth out the noisy time series at each row $k$ of t
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{WindowEffect.pdf}
-  \caption{A larger $\ell$ for the SW-STFT in Equation~\ref{eq:objfn} leads to smoother curves which are more likely to survive mp3 encoding, but an $\ell$ that's too large can over-smooth.}
+  \caption{This figure shows the effect of varying $\ell$ for a fixed $\lambda=0.1$.  A larger $\ell$ for the SW-STFT in Equation~\ref{eq:objfn} leads to smoother curves which are more likely to survive compression, but an $\ell$ that's too large can over-smooth.}
   \label{fig:WindowEffect}
 \end{figure}
 
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{LambdaEffect.pdf}
-  \caption{A smaller $\lambda$ in Equation~\ref{eq:objfn} leads to higher geometric fidelity (Goal~\ref{goal:geomquality}), at the cost of audio quality (Goal~\ref{goal:imperceptible}), as measured by SNR.}
+  \caption{This figure shows the effect of varying $\lambda$ for a fixed $\ell=16$.  A smaller $\lambda$ in Equation~\ref{eq:objfn} leads to higher geometric fidelity (Goal~\ref{goal:geomquality}), at the cost of audio quality (Goal~\ref{goal:imperceptible}), as measured by SNR.}
   \label{fig:LambdaEffect}
 \end{figure}
 
@@ -222,9 +222,23 @@ subject to $\hat{M_{k, j}} \geq 0$.  In other words, we want the magnitude SW-ST
 
 
 
-\subsubsection{Efficient Computation}
+\subsubsection{Computational Complexity}
 \label{sec:computation}
-Minimizing equation~\ref{eq:objfn} can be formulated as a sparse nonnegative linear least squares problem.  Though Equation~\ref{eq:objfn} suggest an $O(N \ell)$ time complexity to evaluate the objective function, the linear operator and its adjoint can be implemented with a number of operations proportional to $N$ only, and independent of $\ell$, using the 1D version of the ``summed area tables'' trick in computer vision \cite{lewisfast}.
+Minimizing equation~\ref{eq:objfn} can be formulated as a sparse nonnegative linear least squares problem, and there are myriad algorithms for solving such systems efficiently via repeated evaluation of the linear system and its adjoint.  Furthermore, though Equation~\ref{eq:objfn} suggest an $O(N \ell)$ time complexity to evaluate the objective function at each iteration, the linear operator and its adjoint can be implemented with $O(N)$ operations only, independent of $\ell$, using the 1D version of the ``summed area tables'' trick in computer vision \cite{lewisfast}.  For example, let 
+
+\begin{equation}
+  \label{eq:cumusum}
+  C_{k, j} = \sum_{i=j}^{j+\ell} \hat{M_{k, i}}
+\end{equation}
+
+then Equation~\ref{eq:objfn} can be rewritten as 
+\begin{equation}
+  \label{eq:objfncumusum}
+  f_i(\hat{M}) = \sum_{j=1}^{N-\ell+1} \left( (C_{k, j+\ell}-C_{k, j}) - T_i[j] \right)^2 + \lambda \sum_{j=1}^N \left( M_{k, j} - \hat{M}_{k, j} \right)^2
+\end{equation}
+
+A similar trick can be used for the adjoint operator.
+
 
 It is also worth noting that a higher $\lambda$ in equation~\ref{eq:objfn} leads to a lower condition number\footnote{The condition number of a matrix is defined as the ratio of the largest to smallest singular values, and lower condition numbers are more numerically desireable.} of the matrix in the implied linear system, which leads to faster computation.  But as Figure~\ref{fig:LambdaEffect} shows, it may be worth it to use smaller $\lambda$ values.  In practice, we see it as a difference between an encoding in 30 seconds of audio that takes a few seconds for $\lambda=0.1$ versus an encoding that takes a split second for $\lambda=10$ on a CPU.
 
@@ -233,7 +247,7 @@ It is also worth noting that a higher $\lambda$ in equation~\ref{eq:objfn} leads
 \subsubsection{The choice of non-overlapping windows}
 Though some other works use transforms with overlapping windows (\cite{hwan_sik_yun_acoustic_2010,geleta_pixinwav_2021}), we find that changing different STFT bins independently can lead to STFTs that do not correspond to any real signal due to discrepancies between overlapping windows.  An algorithm like Griffin-Lim \cite{griffin1984signal} can recover a signal whose spectrogram has a locally minimal distance to the perturbed STFT, but we find that this step introduces an unacceptable level of distortion both in the target and the carrier audio.  This problem occurs even for real-valued transforms such as the Discrete Cosine Transform (which was used by \cite{geleta_pixinwav_2021}).  We sidestep this problem completely by using non-overlapping windows as in \cite{xiaoxiao_dong_data_2004}.  
 
-The main downside of non-overlapping windows is that they lead to fewer STFT frames.  For instance, for a 30 second audio clip at 44100hz using a window length of 1024, we are limited to about 1292 frames, which is half of what we would get using an overlapping STFT with a hop length of 512.  However, a quick thought experiment shows that this is still a reasonable data rate.  Suppose that we use a sliding window length $\ell=16$, for a total of 1277 carrier samples.  Suppose also that the precision of our embedding of a 2D plane curve is roughly on par with an 8 bit per coordinate quantization in a more conventional binary encoding scheme.  Then the total number of bits transmitted over 30 seconds is $1277 \times 8 \times 2$, or about 681 bits/second.  This number jumps to about 1022 bits/second for a 3D curve.  These numbers are on part with other recent techniques that are designed to be robust to noise (e.g. 900 bits/second in the OFDM technique of \cite{eichelberger_receiving_2019}).  Furthermore, our equivalent of a ``bit error'' is additive coordinate noise,and the target can still be visible with some amount of such noise.
+Aside from window effects, the main downside of non-overlapping windows is that they lead to fewer STFT frames.  For instance, with a 30 second audio clip at 44100hz using a window length of 1024, we are limited to about 1292 frames, which is half of what we would get using an overlapping STFT with a hop length of 512.  However, a quick thought experiment shows that this is still a reasonable data rate.  Suppose that we use a sliding window length $\ell=16$, for a total of 1277 carrier samples.  Suppose also that the precision of our embedding of a 2D plane curve is roughly on par with an 8 bit per coordinate quantization in a more conventional binary encoding scheme.  Then the total number of bits transmitted over 30 seconds is $1277 \times 8 \times 2$, or about 681 bits/second.  This number jumps to about 1022 bits/second for a 3D curve.  These numbers are on par with other recent techniques that are designed to be robust to noise (e.g. 900 bits/second in the OFDM technique of \cite{eichelberger_receiving_2019}).  Furthermore, our equivalent of a ``bit error'' is additive coordinate noise, and the hidden signal degrades continuously with increased noise, rather than reaching a failure mode when a bit error is too high.
 
 
 
