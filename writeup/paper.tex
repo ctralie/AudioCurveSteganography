@@ -172,6 +172,16 @@ To approximately smooth a curve via one step of curvature-shortening flow, Mokht
 \section{Hamiltonian Paths on Watertight Triangle Meshes}
 \label{sec:hamiltonian}
 
+\begin{figure}
+  \centering
+  \includegraphics[width=\columnwidth]{HamiltonianHorse.pdf}
+  \caption{An example of the algorithm of Gopi and Epstein \cite{gopi2004single} on a horse model from the Princeton mesh segmentation benchmark \cite{Chen:2009:ABF}.}
+  \label{fig:HamiltonianHorse}
+\end{figure}
+
+In addition to 2D TSP tours on stipple patterns on planar images, we can also create artistic 3D space curves that fill out the surfaces of 3D shapes following the technique of Gopi and Epstein \cite{gopi2004single}.  They observe that watertight triangle meshes (those with no boundary) have a dual graph in which a perfect matching exists.  In other words, it is possible to partition the triangles into a set of adjacent pairs (second column of Figure~\ref{fig:HamiltonianHorse}).  Adding edges between unpaired triangles leads to a set of disconnected cycles (third column of Figure~\ref{fig:HamiltonianHorse}), which can be connected by a spanning set of edges between paired triangles.  Finally, the spanning edges can be split into bridges between the cycles disconnected cycles, joining them together into one large cycle that covers the surface of the triangle mesh.
+
+
 
 
 \section{Curve Embedding in Audio}
@@ -217,7 +227,7 @@ The effect of $\ell$ is to smooth out the noisy time series at each row $k$ of t
 
 
 
-subject to $\hat{M_{k, j}} \geq 0$.  In other words, we want the magnitude SW-STFT of a perturbed signal to match the target coordinate as well as possible, while preserving the original audio as well as possible, according to $\lambda$.  A greater $\lambda$ means that the signal will fit the original audio better, at the cost of a noisier curve.  Figure~\ref{fig:LambdaEffect} shows some examples.
+subject to $\hat{M_{k, j}} \geq 0$.  In other words, we want the magnitude SW-STFT of a perturbed signal to match the target coordinate as well as possible, while preserving the original audio as well as possible, according to $\lambda$.  A greater $\lambda$ means that the signal will fit the original audio better, at the cost of a noisier curve.  Figure~\ref{fig:LambdaEffect} shows an example of varying $\lambda$.
 
 
 
@@ -237,10 +247,8 @@ then Equation~\ref{eq:objfn} can be rewritten as
   f_i(\hat{M}) = \sum_{j=1}^{N-\ell+1} \left( (C_{k, j+\ell}-C_{k, j}) - T_i[j] \right)^2 + \lambda \sum_{j=1}^N \left( M_{k, j} - \hat{M}_{k, j} \right)^2
 \end{equation}
 
-A similar trick can be used for the adjoint operator.
 
-
-It is also worth noting that a higher $\lambda$ in equation~\ref{eq:objfn} leads to a lower condition number\footnote{The condition number of a matrix is defined as the ratio of the largest to smallest singular values, and lower condition numbers are more numerically desireable.} of the matrix in the implied linear system, which leads to faster computation.  But as Figure~\ref{fig:LambdaEffect} shows, it may be worth it to use smaller $\lambda$ values.  In practice, we see it as a difference between an encoding in 30 seconds of audio that takes a few seconds for $\lambda=0.1$ versus an encoding that takes a split second for $\lambda=10$ on a CPU.
+It is also worth noting that a higher $\lambda$ in equation~\ref{eq:objfn} leads to a lower condition number\footnote{The condition number of a matrix is defined as the ratio of the largest to smallest singular values, and lower condition numbers are more numerically desireable.} of the matrix in the implied linear system, which leads to faster minimization of Equation~\ref{eq:objfn}.  But as Figure~\ref{fig:LambdaEffect} shows, it may still be worth it to use smaller $\lambda$ values.  In practice, we see it as a difference between an encoding in 30 seconds of audio that takes a few seconds for $\lambda=0.1$ versus an encoding that takes a split second for $\lambda=10$ on a CPU.
 
 
 
