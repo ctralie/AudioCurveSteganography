@@ -57,6 +57,7 @@ Our goals and design constraints are as follows:
     \item \label{goal:imperceptible} The hidden data should be audibly imperceptible
     \item \label{goal:geomquality} The hidden data should be faithfully preserved and {\em robust to compression}
     \item \label{goal:misalignment} The hidden data should be robust to frame misalignment, or it should be possible to recover a frame alignment without any prior information
+    \item \label{goal:metadata} No metadata should be required to retrieve the hidden data; (compressed) audio alone should suffice
     \item \label{goal:partial} It should be possible to recover the data partially from partial audio chunks; that is, we don't need to wait for the entire data stream to recover the signal
 \end{enumerate}
 
@@ -146,7 +147,7 @@ then it is possible to perform a swap to yield a new tour with a smaller distanc
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{CurvatureShortening.png}
-  \caption{Anticipating that mp3 compression will introduce noise to our embedded curves, we pre-smooth them before hiding them using one application of curvature-shortening flow, which smooths the curves without introducing any crossings.  We find $\sigma=1$ to be a good tradeoff between smoothness and detail.}
+  \caption{Anticipating that mp3 compression will introduce noise to our embedded curves, we pre-smooth them before hiding them using one iteration of curvature-shortening flow, which smooths the curves without introducing any crossings.  We find $\sigma=1$ to be a good tradeoff between smoothness and detail.}
   \label{fig:CurvatureShortening}
 \end{figure}
 
@@ -157,7 +158,7 @@ Since mp3 compression introduces noise into our embedded curves, we smooth them 
   g'_{\sigma}[j] = - c_2 \frac{j}{\sigma^2} e^{-j^2 / (2 \sigma^2)}
 \end{equation}
 
-where $c_1$ and $c_2$ are appropriate normalization constants.  Then we can estimate the arc length of a sampled curve $\gamma[j]$ with the rectangular integral of a smoothed velocity estimate:
+where $c_1$ and $c_2$ are appropriate normalization constants.  Then we estimate the arc length of a sampled curve $\gamma[j]$ with the rectangular integral of a smoothed velocity estimate:
 
 \begin{equation}
   \label{eq:arclen}
@@ -178,12 +179,12 @@ To approximately smooth a curve via one step of curvature-shortening flow, Mokht
   \label{fig:HamiltonianHorse}
 \end{figure}
 
-In addition to 2D TSP tours on stipple patterns on planar images, we can also create artistic 3D space curves that fill out the surfaces of 3D shapes following the technique of Gopi and Epstein \cite{gopi2004single}.  They observe that watertight triangle meshes (those with no boundary) have a dual graph in which a perfect matching exists.  In other words, it is possible to partition the triangles into a set of adjacent pairs (second column of Figure~\ref{fig:HamiltonianHorse}).  In practice, we use the Blossom-5 algorithm \cite{kolmogorov2009blossom} to find perfect matches of the dual graph.  Then, adding edges between unpaired triangles leads to a set of disconnected cycles (third column of Figure~\ref{fig:HamiltonianHorse}), which can be connected by a spanning set of edges between paired triangles.  Finally, the spanning edges can be split into bridges between the cycles disconnected cycles, joining them together into one large cycle that covers the surface of the triangle mesh.
+In addition to 2D TSP tours on stipple patterns on planar images, we also create artistic 3D space curves that fill out the surfaces of 3D shapes following the technique of Gopi and Epstein \cite{gopi2004single}.  They observe that watertight triangle meshes (those with no boundary) have a dual graph in which a perfect matching exists.  In other words, it is possible to partition the triangles into a set of adjacent pairs (second column of Figure~\ref{fig:HamiltonianHorse}).  In practice, we use the Blossom-5 algorithm \cite{kolmogorov2009blossom} to find perfect matches of the dual graph.  Then, adding edges between unpaired triangles leads to a set of disconnected cycles (third column of Figure~\ref{fig:HamiltonianHorse}), which are connected by a spanning set of edges between paired triangles.  Finally, the spanning edges are split into bridges between the disconnected cycles, joining them together into one large cycle that covers the surface of the triangle mesh.
 
 
 \section{Curve Embedding in Audio}
 
-We now introduce our new algorithm for hiding artistic space curves, such as 2D TSP paths (Section~\ref{sec:tsp}) and 3D Hamiltonian paths (Section~\ref{sec:hamiltonian}), in audio.  Before we go into the details, we first define quantitative measurements for measuring the fit to the original audio (Goal~\ref{goal:imperceptible}) and the geometric quality of the hidden curve (Goal~\ref{goal:geomquality}).  
+We now introduce our new algorithm for hiding artistic space curves, such as 2D TSP paths (Section~\ref{sec:tsp}) and 3D Hamiltonian paths (Section~\ref{sec:hamiltonian}), in audio.  Before we go into the details, we first define quantitative measurements for measuring the fit to the original audio (Goal~\ref{goal:imperceptible}) and the geometric quality of the hidden curve (Goal~\ref{goal:geomquality}).  Let the original carrier audio be $x_i$ and let the steganography audio be $y_i$.  Then the steganographic signal to noise ratio is define as   
 
 \subsection{Formulation of Least Squares Problem}
 
@@ -211,7 +212,7 @@ The effect of $\ell$ is to smooth out the noisy time series at each row $k$ of t
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{WindowEffect.pdf}
-  \caption{This figure shows the effect of varying $\ell$ for a fixed $\lambda=0.1$, using the lowest two non-DC frequencies to embed each coordinate.  A larger $\ell$ for the SW-STFT in Equation~\ref{eq:objfn} leads to smoother curves which are more likely to survive compression, but an $\ell$ that's too large can over-smooth.}
+  \caption{This figure shows the effect of varying $\ell$ for a fixed $\lambda=0.1$, using the lowest two non-DC frequencies to embed each coordinate.  A larger $\ell$ for the SW-STFT in Equation~\ref{eq:objfn} leads to smoother curves which are more likely to survive compression, but an $\ell$ that's too large may over-smooth.}
   \label{fig:WindowEffect}
 \end{figure}
 
@@ -226,22 +227,15 @@ The effect of $\ell$ is to smooth out the noisy time series at each row $k$ of t
 
 subject to $\hat{M_{k_i, j}} \geq 0$.  In other words, we want the magnitude SW-STFT of a perturbed signal to match the target coordinate as well as possible, while preserving the original audio as well as possible, according to $\lambda$.  A greater $\lambda$ means that the signal will fit the original audio better, at the cost of a noisier curve.  Figure~\ref{fig:LambdaEffect} shows an example of varying $\lambda$.
 
-After solving for $\hat{M_{k_i, j}}$, we replace all rows of $M_{k_i}$ with $\hat{M_{k_i}}$, and we perform an inverse STFT of $M e^{i P}$ for the original phases $P$ (Section~\ref{sec:componentscales} will explain when it is necessary to modify the phases as well).  We can then save the resulting audio in a compressed format, and recover the hidden signal by loading it in and extracting the corresponding components of the magnitude SW-STFT.
+After solving for $\hat{M_{k_i, j}}$, we replace all rows of $M_{k_i}$ with $\hat{M_{k_i}}$, and we perform an inverse STFT of $M e^{i P}$ for the original phases $P$ (Section~\ref{sec:componentscales} will explain when it is necessary to modify the phases as well).  We then save the resulting audio in a compressed format, and recover the hidden signal by loading it in and extracting the corresponding components of the magnitude SW-STFT.
 
 
 \subsubsection{Computational Complexity}
 \label{sec:computation}
-Minimizing equation~\ref{eq:objfn} can be formulated as a sparse nonnegative linear least squares problem, and there are myriad algorithms \cite{branch1999subspace} for solving such systems efficiently via repeated evaluation of the linear system and its adjoint on iterative estimates of a solution .  Furthermore, though Equation~\ref{eq:objfn} suggest an $O(N \ell)$ time complexity to evaluate the objective function at each iteration, the linear operator and its adjoint can be implemented with $O(N)$ operations only, independent of $\ell$, using the 1D version of the ``summed area tables'' trick in computer vision \cite{lewisfast}.  For example, let 
-
-\begin{equation}
-  \label{eq:cumusum}
-  C_{k_i, j} = \sum_{i=j}^{j+\ell} \hat{M_{k, i}}
-\end{equation}
-
-then Equation~\ref{eq:objfn} can be rewritten as 
+Minimizing equation~\ref{eq:objfn} can be formulated as a sparse nonnegative linear least squares problem, and there are myriad algorithms (e.g. \cite{branch1999subspace}) for solving such systems efficiently via repeated evaluation of the linear system and its adjoint on iterative estimates of a solution .  Furthermore, though Equation~\ref{eq:objfn} suggest an $O(N \ell)$ time complexity to evaluate the objective function at each iteration, we implement the linear operator and its adjoint with $O(N)$ operations only, independent of $\ell$, using the 1D version of the ``summed area tables'' trick in computer vision \cite{lewisfast}.  For example, let $C_{k_i, j} = \sum_{i=0}^{j} \hat{M_{k, i}}$, and $C_{k_i, j < 1} = 0$.  Then Equation~\ref{eq:objfn} can be rewritten as 
 \begin{equation}
   \label{eq:objfncumusum}
-  f_i(\hat{M}) = \sum_{j=1}^{N-\ell+1} \left( (C_{k_i, j+\ell}-C_{k_i, j}) - T_i[j] \right)^2 + \lambda \sum_{j=1}^N \left( M_{k_i, j} - \hat{M}_{k_i, j} \right)^2
+  f_i(\hat{M}) = \sum_{j=1}^{N-\ell+1} \left( (C_{k_i, j+\ell-1}-C_{k_i, j-1}) - T_i[j] \right)^2 + \lambda \sum_{j=1}^N \left( M_{k_i, j} - \hat{M}_{k_i, j} \right)^2
 \end{equation}
 
 
@@ -250,21 +244,38 @@ It is also worth noting that a higher $\lambda$ in equation~\ref{eq:objfn} leads
 
 
 \subsubsection{The choice of non-overlapping windows}
-Though some other works use transforms with overlapping windows (\cite{hwan_sik_yun_acoustic_2010,geleta_pixinwav_2021}), we find that changing different STFT bins independently can lead to STFTs that do not correspond to any real signal due to discrepancies between overlapping windows.  An algorithm like Griffin-Lim \cite{griffin1984signal} can recover a signal whose spectrogram has a locally minimal distance to the perturbed STFT, but we find that this step introduces an unacceptable level of distortion both in the target and the carrier audio.  This problem occurs even for real-valued transforms such as the Discrete Cosine Transform (which was used by \cite{geleta_pixinwav_2021}).  We sidestep this problem completely by using non-overlapping windows as in \cite{xiaoxiao_dong_data_2004}.  
+Though some other works use transforms with overlapping windows \cite{hwan_sik_yun_acoustic_2010,geleta_pixinwav_2021}, changing different STFT bins independently leads to STFTs that do not correspond to any real signal due to discrepancies between overlapping windows.  An algorithm like Griffin-Lim \cite{griffin1984signal} can recover a signal whose spectrogram has a locally minimal distance to the perturbed STFT, but we find that this step introduces an unacceptable level of distortion both in the target and the carrier audio.  This problem occurs even for real-valued transforms such as the Discrete Cosine Transform (which was used by \cite{geleta_pixinwav_2021}).  Like \cite{xiaoxiao_dong_data_2004}, we sidestep this problem by using non-overlapping windows.  
 
 Aside from window effects, the main downside of non-overlapping windows is that they lead to fewer STFT frames.  For instance, with a 30 second audio clip at 44100hz using a window length of 1024, we are limited to about 1292 frames, which is half of what we would get using an overlapping STFT with a hop length of 512.  However, a quick thought experiment shows that this is still a reasonable data rate.  Suppose that we use a sliding window length $\ell=16$, for a total of 1277 carrier samples.  Suppose also that the precision of our embedding of a 2D plane curve is roughly on par with an 8 bit per coordinate quantization in a more conventional binary encoding scheme.  Then the total number of bits transmitted over 30 seconds is $1277 \times 8 \times 2$, or about 681 bits/second.  This number jumps to about 1022 bits/second for a 3D curve.  These numbers are on par with other recent techniques that are designed to be robust to noise (e.g. 900 bits/second in the OFDM technique of \cite{eichelberger_receiving_2019}).  Furthermore, our equivalent of a ``bit error'' is additive coordinate noise, and the hidden signal degrades continuously with increased noise, rather than reaching a failure mode when a bit error is too high.
 
 
 
 
-\subsection{Rescaling And Re-Parameterizing Targets for Better Fits}
+\subsection{Shifting, Scaling And Re-Parameterizing Targets for Better Fits}
 \label{sec:reparam}
 
+\subsubsection{Vertical Translation/Scaling}
 
-A crucial step to keep the hidden signal imperceptible is to rescale the targets to match the dynamic range of the signals.  Unfortunately, we lose relative scale information between the components, but we will explain how to store and recover this in Section~\ref{sec:componentscales}
+A crucial step to keep the hidden signal imperceptible is to shift and rescale the target coordinates of the hidden curve to match the dynamic range of the SW-STFT components.  This way, the STFT magnitudes don't have to be perturbed as much to match the target.  Let $\text{SWS}_{\ell}\left({M_{k+i}}\right)$ be the $i^{\text{th}}$ frequency coordinate of the SW-STFT of the carrier signal, and let $T_i[m]$ be the $m^{\text{th}}$ coordinate of the $i^{\text{th}}$ dimension of the target curve.  We first choose a scale ratio $a_i$ for each component as the ratio of the standard deviations $\text{stdev}_j \left( \text{SWS}_{\ell} ({M_{k+i}})[j] \right) / \text{stdev}_j (T_i[j])$.  Then, letting $N$ be the length of the two signals, we choose the vertical shift $b_i$ as
+
+\begin{equation}
+  b_i = \frac{1}{N} \sum_{j=1}^N  \text{SWS}_{\ell} ({M_{k+i}})[j] - T_i[j]
+\end{equation}
+
+the rescaled target $\hat{T}$ is then defined as $\hat{T_i}[j] = a_i T_i[j] + b_i$.  Unfortunately, we do lose relative scale information between the components, but we will explain how to hide and recover this in Section~\ref{sec:componentscales}
+
+\subsubsection{Viterbi Re-Parameterization}
+Beyond shifting and scaling the targets coordinates vertically, we may also need to re-parameterize them in time, since, in general, the SWS-STFT sequence will not have the same number of samples as the target $T$.  Let $M$ be the number of samples of the SW-STFT and $N$ be the number of samples of the target, and assume that $N > M$. 
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\columnwidth]{Viterbi.pdf}
+  \caption{Starting at a different place on the target loop and traversing it at a non-uniform speed traces out the same shape, while matching the given SW-STFT better.}
+  \label{fig:ViterbiWarp}
+\end{figure}
 
 
-In general, the SWS-STFT sequence will not have the same number of samples as the target $T$.  If we stick to scenarios where $T$ has more samples, we can index $X$ by a default function 
+
 
 
 
@@ -283,11 +294,11 @@ We use the technique presented by the authors of \cite{xiaoxiao_dong_data_2004} 
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{OptimalShift.pdf}
-  \caption{Curve length can be used as a proxy for distortion, so a shift which minimizes curve length is most likely the shift needed to re-align audio to frame windows.  The dot here indicates the ground truth shift of an embedding using the lowest two non-DC frequencies with $\lambda=0.1, \ell=16$, and the global mins exactly match ground truth.}
+  \caption{A shift which minimizes curve length is most likely the shift needed to re-align audio to frame windows.  The dot here indicates the ground truth shift of an embedding using the lowest two non-DC frequencies with $\lambda=0.1, \ell=16$, and the global mins exactly match ground truth.}
   \label{fig:FrameAlignments}
 \end{figure}
 
-What we've described so far works for audio that's aligned to each window, but additional work needs to be done to address Goal ~\ref{goal:misalignment} if the audio to decode comes in misaligned.  To this end, we can use the fact that the curves don't jump very far from sample to sample; a TSP tour is defined as length-minimizing, and adjacent samples in Hamiltonian cycles on meshes move only between neighboring triangles on the original mesh.  Therefore, if the embedding is frame aligned, the length of the curve should be minimized.  Conversely, if the embedding is not frame aligned, the curve becomes noisy and is more likely to jump around quickly from sample to sample.  Figure~\ref{fig:FrameAlignments}
+What we've described so far works for audio that's aligned to each window, but additional work needs to be done to address Goal ~\ref{goal:misalignment} if the audio to decode comes in misaligned.  To this end, we use the fact that the curves don't jump very far from sample to sample; a TSP tour is defined as length-minimizing, and adjacent samples in Hamiltonian cycles on meshes move only between neighboring triangles on the original mesh.  Therefore, if the embedding is frame aligned, the length of the curve should be minimized.  Conversely, if the embedding is not frame aligned, the curve becomes noisy and is more likely to jump around quickly from sample to sample.  Figure~\ref{fig:FrameAlignments}
 
 
 
