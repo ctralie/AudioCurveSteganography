@@ -56,7 +56,6 @@ Our goals and design constraints are as follows:
 \begin{enumerate}
     \item \label{goal:imperceptible} The hidden data should be audibly imperceptible
     \item \label{goal:geomquality} The hidden data should be faithfully preserved and {\em robust to compression}
-    \item \label{goal:nokeys} It should be possible to decode the data without any prior knowledge/keys
     \item \label{goal:misalignment} The hidden data should be robust to frame misalignment, or it should be possible to recover a frame alignment without any prior information
     \item \label{goal:partial} It should be possible to recover the data partially from partial audio chunks; that is, we don't need to wait for the entire data stream to recover the signal
 \end{enumerate}
@@ -179,14 +178,12 @@ To approximately smooth a curve via one step of curvature-shortening flow, Mokht
   \label{fig:HamiltonianHorse}
 \end{figure}
 
-In addition to 2D TSP tours on stipple patterns on planar images, we can also create artistic 3D space curves that fill out the surfaces of 3D shapes following the technique of Gopi and Epstein \cite{gopi2004single}.  They observe that watertight triangle meshes (those with no boundary) have a dual graph in which a perfect matching exists.  In other words, it is possible to partition the triangles into a set of adjacent pairs (second column of Figure~\ref{fig:HamiltonianHorse}).  Adding edges between unpaired triangles leads to a set of disconnected cycles (third column of Figure~\ref{fig:HamiltonianHorse}), which can be connected by a spanning set of edges between paired triangles.  Finally, the spanning edges can be split into bridges between the cycles disconnected cycles, joining them together into one large cycle that covers the surface of the triangle mesh.
-
-
+In addition to 2D TSP tours on stipple patterns on planar images, we can also create artistic 3D space curves that fill out the surfaces of 3D shapes following the technique of Gopi and Epstein \cite{gopi2004single}.  They observe that watertight triangle meshes (those with no boundary) have a dual graph in which a perfect matching exists.  In other words, it is possible to partition the triangles into a set of adjacent pairs (second column of Figure~\ref{fig:HamiltonianHorse}).  In practice, we use the Blossom-5 algorithm \cite{kolmogorov2009blossom} to find perfect matches of the dual graph.  Then, adding edges between unpaired triangles leads to a set of disconnected cycles (third column of Figure~\ref{fig:HamiltonianHorse}), which can be connected by a spanning set of edges between paired triangles.  Finally, the spanning edges can be split into bridges between the cycles disconnected cycles, joining them together into one large cycle that covers the surface of the triangle mesh.
 
 
 \section{Curve Embedding in Audio}
 
-We now introduce our new algorithm for hiding artistic space curves, such as 2D TSP paths (Section~\ref{sec:tsp}) and 3D Hamiltonian paths (Section~\ref{sec:hamiltonian}), in audio.
+We now introduce our new algorithm for hiding artistic space curves, such as 2D TSP paths (Section~\ref{sec:tsp}) and 3D Hamiltonian paths (Section~\ref{sec:hamiltonian}), in audio.  Before we go into the details, we first define quantitative measurements for measuring the fit to the original audio (Goal~\ref{goal:imperceptible}) and the geometric quality of the hidden curve (Goal~\ref{goal:geomquality}).  
 
 \subsection{Formulation of Least Squares Problem}
 
@@ -302,12 +299,19 @@ Show caltech-101 and meshseg examples
 
 \begin{figure}
   \centering
-  \includegraphics[width=\columnwidth]{caltech101_samples.pdf}
+  \includegraphics[width=\columnwidth]{caltech101_samples.png}
   \caption{Examples of some TSP art on the Caltech-101 dataset \cite{li_andreeto_ranzato_perona_2022}.}
   \label{fig:caltech101examples}
 \end{figure}
 
-\subsection{Quantitative Metrics}
+\begin{figure}
+  \centering
+  \includegraphics[width=\columnwidth]{MeshSegExamples.png}
+  \caption{Examples of some Hamiltonian cycles on triangle meshes from the Princeton mesh segmentation benchmark \cite{Chen:2009:ABF}.}
+  \label{fig:meshsegexamples}
+\end{figure}
+
+\subsection{Quantitative Results}
 
 \subsection{Subjective Listening Experiment}
 
