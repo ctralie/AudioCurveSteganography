@@ -190,20 +190,20 @@ We now introduce our new algorithm for hiding artistic space curves, such as 2D 
 Let $T = (T_1, T_2, \hdots, T_N \}$ the desired Euclidean target point sequence to hide, where each $T_i \in \mathbb{R}^d$, and $T_i[m]$ refers to the $m^{\text{th}}$ coordinate of $T_i$, and let $x$ be a set of audio samples which will serve as a carrier.  The goal is to perturb the samples of $x$ so that some function of $x$ matches $T$ as closely as possible.  The function we choose is based on a ``time regularized'' version of the magnitude Short-Time Fourier Transform (STFT) which we call a {\em sliding window sum} STFT (SWS-STFT).  As a first step, we compute a {\em non-overlapping} STFT $S$ based on a chosen window length $w$ with a total of $N$ frames:
 
 \begin{equation}
-  S_{k, j} = \sum_{n = 0}^w x_{jw + n} \left(e^{-i 2 \pi k n / w} \right) = M_{k, j} \left( e^{i P_{k, j}} \right)
+  S_{k_i, j} = \sum_{n = 0}^w x_{jw + n} \left(e^{-i 2 \pi k n / w} \right) = M_{k_i, j} \left( e^{i P_{k_i, j}} \right)
 \end{equation}
 
 and we factor $S$ it into its magnitude and phase components $M$ and $P$, respectively.  Then, given a second window length $\ell$, we define the following {\em sliding window sum} function, which we apply to each row $k$ of the magnitudes of $S$ that we wish to perturb to obtain the SWS-STFT
 
 \begin{equation}
-  \text{SWS}_{\ell}\left({M_k}\right)_j = \sum_{n = 0}^{\ell-1} M_{k, j+n}
+  \text{SWS}_{\ell}\left({M_k}\right)_j = \sum_{n = 0}^{\ell-1} M_{k_i, j+n}
 \end{equation}
 
 The effect of $\ell$ is to smooth out the noisy time series at each row $k$ of the magnitude spectrogram so that the rows in the SW-STFT match smoother transitions in the target curves.  The resulting time series $\text{SWS}_{\ell}\left({M_k}\right)$ has $N-\ell+1$ samples.  Let's assume momentarily that $T$ has exactly this many samples; we will address the case where $len(T) > N-\ell+1$ in Section~\ref{sec:reparam}.  We then seek a perturbed version of the magnitudes, $\hat{M}$ so that each coordinate $i$ is hidden in a single frequency index $k_i$ of $\hat{M}$.  To that end, we minimize the following objective function, one coordinate dimension $i = 1, ... d$ at a time:
 
 \begin{equation}
   \label{eq:objfn}
-  f_i(\hat{M}) = \sum_{j=1}^{N-\ell+1} \left( \left( \sum_{n = 0}^{\ell-1} \hat{M}_{k_i, j+n} \right) - T_i[j] \right)^2 + \lambda \sum_{j=1}^N \left( M_{k, j} - \hat{M}_{k, j} \right)^2
+  f_i(\hat{M}) = \sum_{j=1}^{N-\ell+1} \left( \left( \sum_{n = 0}^{\ell-1} \hat{M}_{k_i, j+n} \right) - T_i[j] \right)^2 + \lambda \sum_{j=1}^N \left( M_{k_i, j} - \hat{M}_{k_i, j} \right)^2
 \end{equation}
 
 
@@ -211,37 +211,37 @@ The effect of $\ell$ is to smooth out the noisy time series at each row $k$ of t
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{WindowEffect.pdf}
-  \caption{This figure shows the effect of varying $\ell$ for a fixed $\lambda=0.1$.  A larger $\ell$ for the SW-STFT in Equation~\ref{eq:objfn} leads to smoother curves which are more likely to survive compression, but an $\ell$ that's too large can over-smooth.}
+  \caption{This figure shows the effect of varying $\ell$ for a fixed $\lambda=0.1$, using the lowest two non-DC frequencies to embed each coordinate.  A larger $\ell$ for the SW-STFT in Equation~\ref{eq:objfn} leads to smoother curves which are more likely to survive compression, but an $\ell$ that's too large can over-smooth.}
   \label{fig:WindowEffect}
 \end{figure}
 
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{LambdaEffect.pdf}
-  \caption{This figure shows the effect of varying $\lambda$ for a fixed $\ell=16$.  A smaller $\lambda$ in Equation~\ref{eq:objfn} leads to higher geometric fidelity (Goal~\ref{goal:geomquality}), at the cost of audio quality (Goal~\ref{goal:imperceptible}), as measured by SNR.}
+  \caption{This figure shows the effect of varying $\lambda$ for a fixed $\ell=16$, embedding using the lowest two non-DC frequencies to.  A smaller $\lambda$ in Equation~\ref{eq:objfn} leads to higher geometric fidelity (Goal~\ref{goal:geomquality}), at the cost of audio quality (Goal~\ref{goal:imperceptible}), as measured by SNR.}
   \label{fig:LambdaEffect}
 \end{figure}
 
 
 
-subject to $\hat{M_{k, j}} \geq 0$.  In other words, we want the magnitude SW-STFT of a perturbed signal to match the target coordinate as well as possible, while preserving the original audio as well as possible, according to $\lambda$.  A greater $\lambda$ means that the signal will fit the original audio better, at the cost of a noisier curve.  Figure~\ref{fig:LambdaEffect} shows an example of varying $\lambda$.
+subject to $\hat{M_{k_i, j}} \geq 0$.  In other words, we want the magnitude SW-STFT of a perturbed signal to match the target coordinate as well as possible, while preserving the original audio as well as possible, according to $\lambda$.  A greater $\lambda$ means that the signal will fit the original audio better, at the cost of a noisier curve.  Figure~\ref{fig:LambdaEffect} shows an example of varying $\lambda$.
 
-
+After solving for $\hat{M_{k_i, j}}$, we replace all rows of $M_{k_i}$ with $\hat{M_{k_i}}$, and we perform an inverse STFT of $M e^{i P}$ for the original phases $P$ (Section~\ref{sec:componentscales} will explain when it is necessary to modify the phases as well).  We can then save the resulting audio in a compressed format, and recover the hidden signal by loading it in and extracting the corresponding components of the magnitude SW-STFT.
 
 
 \subsubsection{Computational Complexity}
 \label{sec:computation}
-Minimizing equation~\ref{eq:objfn} can be formulated as a sparse nonnegative linear least squares problem, and there are myriad algorithms for solving such systems efficiently via repeated evaluation of the linear system and its adjoint.  Furthermore, though Equation~\ref{eq:objfn} suggest an $O(N \ell)$ time complexity to evaluate the objective function at each iteration, the linear operator and its adjoint can be implemented with $O(N)$ operations only, independent of $\ell$, using the 1D version of the ``summed area tables'' trick in computer vision \cite{lewisfast}.  For example, let 
+Minimizing equation~\ref{eq:objfn} can be formulated as a sparse nonnegative linear least squares problem, and there are myriad algorithms \cite{branch1999subspace} for solving such systems efficiently via repeated evaluation of the linear system and its adjoint on iterative estimates of a solution .  Furthermore, though Equation~\ref{eq:objfn} suggest an $O(N \ell)$ time complexity to evaluate the objective function at each iteration, the linear operator and its adjoint can be implemented with $O(N)$ operations only, independent of $\ell$, using the 1D version of the ``summed area tables'' trick in computer vision \cite{lewisfast}.  For example, let 
 
 \begin{equation}
   \label{eq:cumusum}
-  C_{k, j} = \sum_{i=j}^{j+\ell} \hat{M_{k, i}}
+  C_{k_i, j} = \sum_{i=j}^{j+\ell} \hat{M_{k, i}}
 \end{equation}
 
 then Equation~\ref{eq:objfn} can be rewritten as 
 \begin{equation}
   \label{eq:objfncumusum}
-  f_i(\hat{M}) = \sum_{j=1}^{N-\ell+1} \left( (C_{k, j+\ell}-C_{k, j}) - T_i[j] \right)^2 + \lambda \sum_{j=1}^N \left( M_{k, j} - \hat{M}_{k, j} \right)^2
+  f_i(\hat{M}) = \sum_{j=1}^{N-\ell+1} \left( (C_{k_i, j+\ell}-C_{k_i, j}) - T_i[j] \right)^2 + \lambda \sum_{j=1}^N \left( M_{k_i, j} - \hat{M}_{k_i, j} \right)^2
 \end{equation}
 
 
@@ -264,7 +264,7 @@ Aside from window effects, the main downside of non-overlapping windows is that 
 A crucial step to keep the hidden signal imperceptible is to rescale the targets to match the dynamic range of the signals.  Unfortunately, we lose relative scale information between the components, but we will explain how to store and recover this in Section~\ref{sec:componentscales}
 
 
-In general, the SWS-STFT sequence $X$ will not have the same number of samples as the target $T$.  If we stick to scenarios where $T$ has more samples, we can index $X$ by a default function 
+In general, the SWS-STFT sequence will not have the same number of samples as the target $T$.  If we stick to scenarios where $T$ has more samples, we can index $X$ by a default function 
 
 
 
@@ -280,13 +280,16 @@ We use the technique presented by the authors of \cite{xiaoxiao_dong_data_2004} 
 
 \subsection{Recovering Frame Alignments}
 
-
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{OptimalShift.pdf}
-  \caption{Curve length can be used as a proxy for distortion.}
-  \label{fig:TSPTour}
+  \caption{Curve length can be used as a proxy for distortion, so a shift which minimizes curve length is most likely the shift needed to re-align audio to frame windows.  The dot here indicates the ground truth shift of an embedding using the lowest two non-DC frequencies with $\lambda=0.1, \ell=16$, and the global mins exactly match ground truth.}
+  \label{fig:FrameAlignments}
 \end{figure}
+
+What we've described so far works for audio that's aligned to each window, but additional work needs to be done to address Goal ~\ref{goal:misalignment} if the audio to decode comes in misaligned.  To this end, we can use the fact that the curves don't jump very far from sample to sample; a TSP tour is defined as length-minimizing, and adjacent samples in Hamiltonian cycles on meshes move only between neighboring triangles on the original mesh.  Therefore, if the embedding is frame aligned, the length of the curve should be minimized.  Conversely, if the embedding is not frame aligned, the curve becomes noisy and is more likely to jump around quickly from sample to sample.  Figure~\ref{fig:FrameAlignments}
+
+
 
 
 
