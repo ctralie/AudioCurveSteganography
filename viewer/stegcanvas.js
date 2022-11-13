@@ -144,6 +144,7 @@ class StegCanvas2D {
         this.scale = 1;
         this.win = 1024;
         this.L = 16;
+        this.Q = 4;
         this.freq1 = 1;
         this.freq2 = 2;
         
@@ -191,9 +192,10 @@ class StegCanvas2D {
         };
         this.progressBar = new ProgressBar();
         this.folder = folder;
-        this.stippleSize = 1;
-        folder.add(this, "win").onChange(this.extractSignal.bind(this));
-        folder.add(this, "L").onChange(this.extractSignal.bind(this));
+        this.stippleSize = 0.2;
+        folder.add(this, "win", 0, this.sr, 1).onChange(this.extractSignal.bind(this));
+        folder.add(this, "L", 0).onChange(this.extractSignal.bind(this));
+        folder.add(this, "Q", 1, 10, 1).onChange(this.extractSignal.bind(this));
         folder.add(this, "freq1", 0, Math.floor(this.win/2), 1).onChange(this.extractSignal.bind(this));
         folder.add(this, "freq2", 0, Math.floor(this.win/2), 1).onChange(this.extractSignal.bind(this));
         folder.add(this, "stippleSize", 0.1, 4).onChange(repaint);
@@ -239,7 +241,7 @@ class StegCanvas2D {
         const progressBar = this.progressBar;
         new Promise((resolve, reject) => {
             const worker = new Worker("dspworker.js");
-            let payload = {samples:that.audioSamples, win:that.win, L:that.L, freqs:[this.freq1, this.freq2]};
+            let payload = {samples:that.audioSamples, win:that.win, L:that.L, Q:that.Q, freqs:[this.freq1, this.freq2]};
             worker.postMessage(payload);
             worker.onmessage = function(event) {
                 if (event.data.type == "newTask") {
@@ -281,39 +283,10 @@ class StegCanvas2D {
         // Setup position and time buffers
         const N = this.x.length;
         let info = new Float32Array(N*3);
-        // Normalize to square
-        let x = [];
-        let y = [];
-        let mins = [this.x[0], this.y[0]];
-        for (let i = 0; i < N; i++) {
-            x[i] = this.x[i];
-            y[i] = this.y[i];
-            if (x[i] < mins[0]) {
-                mins[0] = x[i];
-            }
-            if (y[i] < mins[1]) {
-                mins[1] = y[i];
-            }
-        }
-        let maxes = [x[0]-mins[0], x[0]-mins[1]];
-        for (let i = 0; i < N; i++) {
-            x[i] = x[i] - mins[0];
-            y[i] = y[i] - mins[1];
-            if (x[i] > maxes[0]) {
-                maxes[0] = x[i];
-            }
-            if (y[i] > maxes[1]) {
-                maxes[1] = y[i];
-            }
-        }
-        for (let i = 0; i < N; i++) {
-            x[i] = x[i] / maxes[0];
-            y[i] = y[i] / maxes[0];
-        }
         // Finish setting up buffers
         for (let i = 0; i < N; i++) {
-            info[i*3] = x[i];
-            info[i*3+1] = y[i];
+            info[i*3] = this.x[i];
+            info[i*3+1] = this.y[i];
             info[i*3+2] = i/N;
         }
         gl.bindBuffer(gl.ARRAY_BUFFER, this.infoBuffer);

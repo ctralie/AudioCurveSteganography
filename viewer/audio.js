@@ -1,3 +1,5 @@
+const WINDOW_FAC = 0.7;
+
 /**
  * Create audio samples in the wav format
  * @param {array} channels Array arrays of audio samples
@@ -76,7 +78,7 @@ class SampledAudio {
         // Setup canvases
         canvasArea.innerHTML = ""; // Clear prior canvases
 
-        let width = Math.min(window.innerWidth, window.innerHeight);
+        let width = WINDOW_FAC*Math.min(window.innerWidth, window.innerHeight);
         let folder = that.menu.addFolder("Parameters");
         that.folders.push(folder);
         let canvas = document.createElement("canvas");

@@ -2,6 +2,7 @@ onmessage = function(event) {
     const samples = event.data.samples;
     const win = event.data.win;
     const L = event.data.L;
+    const Q = event.data.Q;
     const freqs = event.data.freqs;
     // Step 1: Setup cosine and sine windows
     postMessage({"type":"newTask", "taskString":"Setting up windows"});
@@ -57,6 +58,50 @@ onmessage = function(event) {
         }
         coords.push(coordsi);
     }
+
+    // Step 4: Normalize and scale by phase
+    postMessage({"type":"newTask", "taskString":"Normalizing"});
+    // Step 4a: Rescale each coordinate to [-1, 1]
+    for (let i = 0; i < freqs.length; i++) {
+        let min = coords[i][0];
+        for (let j = 0; j < coords[i].length; j++) {
+            if (coords[i][j] < min) {
+                min = coords[i][j];
+            }
+        }
+        let max = coords[i][0];
+        for (let j = 0; j < coords[i].length; j++) {
+            coords[i][j] -= min;
+            if (coords[i][j] > max) {
+                max = coords[i][j];
+            }
+        }
+        for (let j = 0; j < coords[i].length; j++) {
+            coords[i][j] = coords[i][j]*2/max - 1;
+        }
+    }
+    // Step 4b: Compute means of each phase
+    const inc = 2*Math.PI/Q;
+    let scales = new Float32Array(freqs.length);
+    for (let i = 0; i < freqs.length; i++) {
+        scales[i] = 0;
+        for (let j = 0; j < SP[i].length; j++) {
+            let p = SP[i][j];
+            let plow = 2*(p - inc*Math.floor(p/inc))/inc;
+            let phigh = 2*(inc*Math.ceil(p/inc) - p)/inc;
+            p = Math.min(plow, phigh);
+            scales[i] += p;
+        }
+        scales[i] /= SP[i].length;
+        scales[i] = (scales[i]-0.25)*2;
+    }
+    // Step 4c: Perform final scaling
+    for (let i = 0; i < scales.length; i++) {
+        for (let j = 0; j < coords[i].length; j++) {
+            coords[i][j] *= scales[i];
+        }
+    }
+    
 
     // Return results
     postMessage({"type":"end", "coords":coords});
