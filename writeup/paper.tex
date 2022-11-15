@@ -271,10 +271,10 @@ In this section, we explain how to modify the target curves to better match the 
 
 \subsubsection{Vertical Translation/Scaling}
 
-A crucial step to keep the hidden signal imperceptible is to shift and rescale the target coordinates of the hidden curve to match the dynamic range of the SW-STFT components.  We first choose a scale ratio $a_i$ for each component as the ratio of the standard deviations $\text{stdev}_j \left( \text{SWS}^{\ell} (M)_{k_i, j} \right) / \text{stdev}_j (T_{i, j})$.  Then, letting $N$ be the length of the two signals, we choose the vertical shift $b_i$ as
+A crucial step to keep the hidden signal imperceptible is to shift and rescale the target coordinates of the hidden curve to match the dynamic range of the SW-STFT components.  We first choose a scale ratio $a_i$ for each component as the ratio of the standard deviations $\text{stdev}_j \left( \text{SWS}^{\ell} (M)_{k_i, j} \right) / \text{stdev}_j (T_{i, j})$.  Then, letting $N$ be the length of the two signals, we compute the vertical shift $b_i$ as
 
 \begin{equation}
-  b_i = \frac{1}{N} \sum_{j=1}^N  \text{SWS}^{\ell} (M)_{k_i, j} - T_{i, j}
+  b_i = \frac{1}{N} \sum_{j=1}^N  \text{SWS}^{\ell} (M)_{k_i, j} - a_i T_{i, j}
 \end{equation}
 
 The rescaled target coordinate $\hat{T_i}$ is then defined as $\hat{T}_{i, j} = a_i T_{i, j} + b_i$.  Unfortunately, we lose relative scale information between the components, but we will explain how to hide and recover this in Section~\ref{sec:componentscales}
@@ -319,7 +319,7 @@ For a fixed $K$, we use the Viterbi algorithm to obtain a $\Theta$ minimizing Eq
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{Viterbi.pdf}
-  \caption{Starting at a different place on the target loop and traversing it at a non-uniform speed traces out the same shape, while matching the given SW-STFT better than a uniform parameterization starting at an artibrary place on the target.}
+  \caption{Circularly shifting the target loop and traversing it at a non-uniform speed traces out the same shape, while matching the given SW-STFT better than a uniform parameterization starting at an artibrary place on the target.}
   \label{fig:ViterbiWarp}
 \end{figure}
 
@@ -345,7 +345,7 @@ We use the technique presented by the authors of \cite{xiaoxiao_dong_data_2004} 
   \label{fig:FrameAlignments}
 \end{figure}
 
-What we've described so far works for audio that is aligned to each window, but additional work needs to be done to address Goal ~\ref{goal:misalignment} if the audio to decode comes in misaligned.  To this end, we use the fact that the curves move only slightly between adjacent samples; a TSP tour is defined as length-minimizing, and adjacent samples in Hamiltonian cycles on meshes move only between neighboring triangles on the original mesh.  If the embedding is frame aligned, the length of the curve should be minimized.  Conversely, if the embedding is not frame aligned, the curve becomes noisy and is more likely to jump around quickly from sample to sample.  Therefore, we can pick the alignment which minimizes the length in all possible shifts from $0$ to $win$.  Figure~\ref{fig:FrameAlignments} shows an example.  We will empirically evaluate this in Section~\ref{sec:experiments}.
+What we've described so far works for audio that is aligned to each window, but additional work needs to be done to address Goal ~\ref{goal:misalignment} if the audio to decode comes in misaligned.  To this end, we use the fact that the hidden curves move only slightly between adjacent samples; a TSP tour is defined as length-minimizing, and adjacent samples in Hamiltonian cycles on meshes move only between neighboring triangles on the original mesh.  If the embedding is frame aligned, the length of the curve should be minimized.  Conversely, if the embedding is not frame aligned, the curve becomes noisy and is more likely to jump around quickly from sample to sample.  Therefore, we can pick the alignment which minimizes the length in all possible shifts from $0$ to $win$.  Figure~\ref{fig:FrameAlignments} shows an example.  We will empirically evaluate this in Section~\ref{sec:experiments}.
 
 
 
@@ -374,12 +374,39 @@ Show caltech-101 and meshseg examples
 
 \subsection{Quantitative Results}
 
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\columnwidth]{CaltechGTzanFixedLam.pdf}
+  \includegraphics[width=\columnwidth]{MeshSegGTzanFixedLam.pdf}
+  \caption{The results embedding curves into clips from the Tzanetakis genre dataset varying the window length $\ell$ for a fixed $\lambda$.  Moderate window lengths are the best choices for both SNR and distortion.  We recommend $\ell=16$.}
+  \label{fig:ResultsFixedLam}
+\end{figure}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\columnwidth]{CaltechGTzanFixedWin.pdf}
+  \includegraphics[width=\columnwidth]{MeshSegGTzanFixedWin.pdf}
+  \caption{The results embedding curves into clips from the Tzanetakis genre dataset, for a fixed $\ell=16$.  As expected from Equation~\ref{eq:objfn}, both the distortion and SNR go up as $\lambda$ increases.}
+  \label{fig:ResultsFixedWin}
+\end{figure}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\columnwidth]{CaltechGTzanViterbiExperiment.pdf}
+  \includegraphics[width=\columnwidth]{MeshSegGtzanViterbiExperiment.pdf}
+  \caption{Pre-warping the target with Viterbi alignment (Section~\ref{sec:reparam}) overall improves the resulting distortion and SNR.}
+  \label{fig:ResultsViterbiExperiment}
+\end{figure}
+
+As Figure~\ref{fig:ResultsFixedLam} shows, increasing the window length has a positive effect on geometric distortion, while moderate window lengths lead to the best SNR.
+
 \subsection{Subjective Listening Experiment}
 
 \begin{figure}
   \centering
   \includegraphics[width=0.8\columnwidth]{Turk.pdf}
-  \caption{Results of the listening experiment on the Amazon Mechanical Turk}
+  \caption{Results of the listening experiment on the Amazon Mechanical Turk.  A lower $\lambda$ leads to a lower mean opinion score, as expected, though not to an intolerable degree.}
   \label{fig:TurkResults}
 \end{figure}
 
