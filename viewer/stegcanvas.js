@@ -1,3 +1,5 @@
+let DSP_WORKER_PATH = "dspworker.js";
+
 const VERT_SRC = `
 attribute vec3 a_info;
 attribute vec3 a_color;
@@ -129,9 +131,9 @@ class StegCanvas2D {
      * @param {Float32Array} audioSamples Audio samples
      * @param {int} sr Sample rate
      * @param {Dat.GUI Folder} folder Handle to dat.gui folder for options
-     * @param {string} colormap Default colormap to use
+     * @param {object} params Default parameters to use
      */
-    constructor(glcanvas, audioPlayer, audioSamples, sr, folder, colormap) {
+    constructor(glcanvas, audioPlayer, audioSamples, sr, folder, params) {
         this.audioPlayer = audioPlayer;
         this.audioSamples = audioSamples;
         this.sr = sr;
@@ -140,13 +142,21 @@ class StegCanvas2D {
         this.colorBuffers = {};
 
         // Viewing options
+        if (params === undefined) {
+            params = {};
+        }
         this.centervec = [0, 0];
         this.scale = 1;
-        this.win = 1024;
-        this.L = 16;
-        this.Q = 4;
-        this.freq1 = 1;
-        this.freq2 = 2;
+        let defaultParams = {"win":1024, "L":16, "Q":4, "freq1":1, "freq2":2, "colormap":"Spectral"};
+        for (let param in defaultParams) {
+            if (param in params) {
+                this[param] = params[param];
+            }
+            else {
+                this[param] = defaultParams[param];
+            }
+        }
+        let colormap = this.colormap;
         
         try {
             glcanvas.gl = glcanvas.getContext("webgl");
@@ -240,7 +250,7 @@ class StegCanvas2D {
         const that = this;
         const progressBar = this.progressBar;
         new Promise((resolve, reject) => {
-            const worker = new Worker("dspworker.js");
+            const worker = new Worker(DSP_WORKER_PATH);
             let payload = {samples:that.audioSamples, win:that.win, L:that.L, Q:that.Q, freqs:[this.freq1, this.freq2]};
             worker.postMessage(payload);
             worker.onmessage = function(event) {
@@ -267,8 +277,7 @@ class StegCanvas2D {
                 }
             }
         }).then(() => {
-            progressBar.changeToReady();
-            progressBar.changeMessage("Ready!  Press play!");
+            progressBar.changeToReady("Ready!  Press play!");
         }).catch(reason => {
             progressBar.setLoadingFailed(reason);
         });

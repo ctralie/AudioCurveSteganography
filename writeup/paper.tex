@@ -265,7 +265,7 @@ A crucial step to keep the hidden signal imperceptible is to shift and rescale t
 the rescaled target $\hat{T}$ is then defined as $\hat{T_i}[j] = a_i T_i[j] + b_i$.  Unfortunately, we do lose relative scale information between the components, but we will explain how to hide and recover this in Section~\ref{sec:componentscales}
 
 \subsubsection{Viterbi Re-Parameterization}
-Beyond shifting and scaling the targets coordinates vertically, we may also need to re-parameterize them in time, since, in general, the SWS-STFT sequence will not have the same number of samples as the target $T$.  Let $M$ be the number of samples of the SW-STFT and $N$ be the number of samples of the target, and assume that $N > M$. 
+Beyond shifting and scaling the targets coordinates vertically, we may also need to re-parameterize them in time, since, in general, the SWS-STFT sequence will not have the same number of samples as the target $T$.  Let $M$ be the number of samples of the SW-STFT and $N$ be the number of samples of the target, and assume that $N > M$ (we can always resample our target curves to make this true). 
 
 \begin{figure}
   \centering
@@ -275,14 +275,47 @@ Beyond shifting and scaling the targets coordinates vertically, we may also need
 \end{figure}
 
 
+\algrenewcommand\algorithmicindent{0.8em}%
+\begin{algorithm}
+  \caption{Stipple Tunes Algorithm}
 
+  \begin{algorithmic}[1]
+    \Procedure{StippleTune}{$Z$, $x$, na, win, tw} \Comment{$Z$ is stipple, $x$ is audio samples, {\em na} is number of discrete angle states, {\em win} is number of samples between angle states, and {\em tw} is amount by which angle can jump each step}
+    \State $N \gets \text{len}(x)$ \Comment{Number of audio samples}
+    \State $Y \gets x + ix$
+    \State Setup a KDTree {\em tree} for fast NN queries on $Z$
+    \State $M \gets \text{ceil}(N / \text{win})$
+    \State $C[i, 0] \gets 0, C[i, j > 1] \gets \infty$ \Comment{$na \times M$ Cumulative cost matrix}
+    \State $I[i, j] \gets 0$ \Comment{$na \times M$ backpointers to best preceding state}
+    \For{$t = 2:M$}
+        \For{$j = 1:na$}
+            \State $\theta_j \gets 2 \pi j / \text{na}$
+            \For{$k = j-\text{tw}:j-1 \mod \text{na}$}
+                \State $\theta_k \gets 2 \pi k / \text{na}$ \label{lst:line:interpolate}
+                \State Let $\theta_{\ell} \gets \theta_j + (\theta_k-\theta_j)/\text{win}$ 
+                \State $d \gets \sum_{\ell = 1}^{\text{win}} \text{tree.query}(Y[\text{win}*t + \ell] e^{i \theta_{\ell}})$ \Comment{Sum nearest neighbors of all points}
+                \If{$C[k, t-1] + d < C[j, t]$}
+                    \State $C[j, t] \gets C[k, t-1] + d$ 
+                    \State $I[j, t] \gets k$  \Comment{Remember optimal transition}
+                \EndIf
+            \EndFor
+        \EndFor
+    \EndFor \\
+    \State Backtrace $I$ to obtain the optimal sequence of angle states
+    \State Linearly interpolate between each angle state (line~\ref{lst:line:interpolate}) to compute $\theta[k], k = 1 \text{ to } N$ 
+    \State Let $X_k$ be the nearest neighbor in $Z$ to $Y_k e^{i \theta[k]}$, using {\em tree} to speed up queries \\
+    \Return $X$
+    \EndProcedure
+  \end{algorithmic}
+  \label{alg:stippletunes}
+\end{algorithm}
 
 
 
 Our use of the Viterbi algorithm for re-parameterizing geometric sequences is related to the technique for corpus-based concatenative synthesis presented by the authors of \cite{schwarz2007corpus}.
 
 
-As a rule of thumb, we find that having a target curve with about 1.5-2x as many samples as there are SWS-STFT frames gives enough wiggle room for the Viterbi algorithm.  Therefore, in our experiments in Section~\ref{sec:experiments}, we will generate TSP and Hamiltonian sequences with 2000 samples for our 1200-1300 SWS-STFT frames
+As a rule of thumb, we find that having a target curve with about 1.5-2x as many samples as there are SWS-STFT frames gives enough wiggle room for the Viterbi algorithm.  In our experiments in Section~\ref{sec:experiments}, we will generate TSP and Hamiltonian sequences with 2000 samples for our 1200-1300 SWS-STFT frames
 
 \subsection{Storing Component Scales in Phase}
 \label{sec:componentscales}

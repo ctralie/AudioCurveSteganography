@@ -55,10 +55,10 @@ class SampledAudio {
    * @param {ArrayBuffer} data Array buffer with audio data
    * @param {DOM Element} canvasArea Handle to the canvas div where canvases
    *                                 can be added
-   * @param {string} colormap Default colormap to use
+   * @param {object} params Default audio parameters
    * @returns 
    */
-  setSamplesAudioBuffer(data, canvasArea, colormap) {
+  setSamplesAudioBuffer(data, canvasArea, params) {
     let that = this;
     return new Promise(resolve => {
       that.audioContext.decodeAudioData(data, function(buff) {
@@ -85,7 +85,7 @@ class SampledAudio {
         canvas.width=width;
         canvas.height=width;
         canvasArea.appendChild(canvas);
-        new StegCanvas2D(canvas, that.audioPlayer, that.channels[0], that.sr, folder, colormap);
+        that.stegCanvas = new StegCanvas2D(canvas, that.audioPlayer, that.channels[0], that.sr, folder, params);
         resolve();
       });
     });

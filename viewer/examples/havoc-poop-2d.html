@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Audio Curve Steganography Viewer</title>
+    <script src="../jslibs/jquery-3.5.1.min.js"></script>
+    <script src="../jslibs/jquery.ajax.arraybuffer.min.js"></script>
+    <script src="../jslibs/base64-arraybuffer.js"></script>
+    <script src="../jslibs/gl-matrix-min.js"></script>
+    <script src="../jslibs/dat.gui.min.js"></script>
+    <script src="../wav.js"></script>
+    <script src="../colormaps.js"></script>
+    <script src="../progressbar.js"></script>
+    <script src="../stegcanvas.js"></script>
+    <script src="../audio.js"></script>
+  </head>
+  <body>
+    <h2>A Poop Emoji hidden in  "Same Shit" by Havoc</h2>
+    <h3>
+      &ell;=16, &lambda; = 0.1, snr=19.1dB, Mean Distortation = 0.037
+    </h3>
+    <p>
+      We use higher frequency indices here of 22 and 23 (947hz and 990hz, respectively) instead of the default 1 and 2 (43hz and 8hz, respectively), because the defaults work poorly in this bass-heavy tune.  Interestingly, the SNR is reported to be higher, though the added frequencies are arguably more audible.
+    </p>
+    <audio controls id="audioPlayer" style="width: 80%;">
+      Your browser does not support the audio element.
+    </audio> 
+    <table id="pageStatusWrapper">
+      <tr>
+          <td><span id="pagestatus"><h4>Welcome!  Choose a tune 🎵 to start</h4></span></td>
+      </tr>
+    </table>
+    <div id="canvasArea"></div>
+
+    <script>
+      DSP_WORKER_PATH = "../dspworker.js";
+      let audioPlayer = document.getElementById("audioPlayer");
+      let audio = new SampledAudio(audioPlayer);
+      const canvasArea = document.getElementById("canvasArea");
+      audio.loadFile("havoc-poop-2d.mp3", canvasArea, {"freq1":22, "freq2":23, "colormap":"copper"});
+    </script>
+
+    </body>
+</html>

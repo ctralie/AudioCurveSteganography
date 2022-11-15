@@ -256,46 +256,6 @@ def viterbi_loop_trace(csm, K):
     path.reverse()
     return path
 
-def get_best_target(X, Y, K):
-    """
-    Return the best path through a target, traversing it in either direction
-
-    Parameters
-    ----------
-    X: ndarray(M, 2)
-        Target states
-    Y: ndarray(N, 2)
-        Time points
-    K: int
-        Maximum jump interval between states
-    """
-    costfn = lambda Z: np.sum(np.abs(Z-Y))
-
-    min_path = np.arange(Y.shape[0]) % X.shape[0]
-    min_cost = costfn(X[min_path, :])
-
-    # Try default orientation
-    csm = np.abs(X[:, 0][:, None] - Y[:, 0][None, :])
-    csm += np.abs(X[:, 1][:, None] - Y[:, 1][None, :])
-    path = viterbi_loop_trace(csm, K)
-    path = np.array(path, dtype=int)
-    cost = costfn(X[path, :])
-    if cost < min_cost:
-        min_cost = cost
-        min_path = path
-    
-    # Try reverse orientation
-    csm = np.abs(X[:, 0][:, None] - Y[::-1, 0][None, :])
-    csm += np.abs(X[:, 1][:, None] - Y[::-1, 1][None, :])
-    path = viterbi_loop_trace(csm, K)
-    path = X.shape[0]-1-np.array(path, dtype=int)
-    cost = costfn(X[path, :])
-    if cost < min_cost:
-        min_cost = cost
-        min_path = path
-
-    return min_path, min_cost
-
 def make_voronoi_image(coords, phases):
     from scipy.spatial import KDTree
     phases = np.abs(phases)

@@ -96,9 +96,15 @@ onmessage = function(event) {
         scales[i] = (scales[i]-0.25)*2;
     }
     // Step 4c: Perform final scaling
+    let maxScaleIdx = 0;
+    for (let i = 1; i < scales.length; i++) {
+        if (scales[i] > scales[maxScaleIdx]) {
+            maxScaleIdx = i;
+        }
+    }
     for (let i = 0; i < scales.length; i++) {
         for (let j = 0; j < coords[i].length; j++) {
-            coords[i][j] *= scales[i];
+            coords[i][j] *= scales[i]/scales[maxScaleIdx];
         }
     }
     
