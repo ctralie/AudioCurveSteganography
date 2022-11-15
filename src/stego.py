@@ -229,8 +229,8 @@ def viterbi_loop_trace(csm, K):
     list(N)
         State indices of best fit cyclic path
     """
-    M = csm.shape[0]
-    N = csm.shape[1]
+    M = csm.shape[0] # N_T
+    N = csm.shape[1] # N_M
     S = np.zeros((M, N))
     S[:, 0] = csm[:, 0]
     B = np.zeros((M, N)) # Backpointers

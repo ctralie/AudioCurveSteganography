@@ -4,7 +4,7 @@
 %
 \documentclass[runningheads]{llncs}
 %
-\usepackage{cite,url,amsfonts}
+\usepackage{cite,url,amsfonts,amsmath}
 \usepackage{algorithm}% http://ctan.org/pkg/algorithms
 \usepackage{algpseudocode}% http://ctan.org/pkg/algorithmicx
 \usepackage{mathtools}
@@ -17,7 +17,7 @@
 % If you use the hyperref package, please uncomment the following line
 % to display URLs in blue roman font according to Springer's eBook style:
 % \renewcommand\UrlFont{\color{blue}\rmfamily}
-
+\DeclareMathOperator*{\argmin}{arg\,min}
 \graphicspath{{figs/}, {../figures/}}
 
 \begin{document}
@@ -254,68 +254,69 @@ Aside from window effects, the main downside of non-overlapping windows is that 
 \subsection{Shifting, Scaling And Re-Parameterizing Targets for Better Fits}
 \label{sec:reparam}
 
+In this section, we explain how to modify the target curves to better match the given SW-STFT so that the STFT magnitudes don't have to be perturbed as much for the SW-STFT to match the target, leading to a less noticeable embedding of the hidden curve for the same quality geometry.
+
 \subsubsection{Vertical Translation/Scaling}
 
-A crucial step to keep the hidden signal imperceptible is to shift and rescale the target coordinates of the hidden curve to match the dynamic range of the SW-STFT components.  This way, the STFT magnitudes don't have to be perturbed as much to match the target.  Let $\text{SWS}_{\ell}\left({M_{k+i}}\right)$ be the $i^{\text{th}}$ frequency coordinate of the SW-STFT of the carrier signal, and let $T_i[m]$ be the $m^{\text{th}}$ coordinate of the $i^{\text{th}}$ dimension of the target curve.  We first choose a scale ratio $a_i$ for each component as the ratio of the standard deviations $\text{stdev}_j \left( \text{SWS}_{\ell} ({M_{k+i}})[j] \right) / \text{stdev}_j (T_i[j])$.  Then, letting $N$ be the length of the two signals, we choose the vertical shift $b_i$ as
+A crucial step to keep the hidden signal imperceptible is to shift and rescale the target coordinates of the hidden curve to match the dynamic range of the SW-STFT components.  Let $\text{SWS}_{\ell}\left({M_{k_i}}\right)$ be the $k_i^{\text{th}}$ frequency coordinate of the SW-STFT of the carrier signal, and let $T_i[m]$ be the $m^{\text{th}}$ coordinate of the $i^{\text{th}}$ dimension of the target curve.  We first choose a scale ratio $a_i$ for each component as the ratio of the standard deviations $\text{stdev}_j \left( \text{SWS}_{\ell} ({M_{k_i}})[j] \right) / \text{stdev}_j (T_i[j])$.  Then, letting $N$ be the length of the two signals, we choose the vertical shift $b_i$ as
 
 \begin{equation}
-  b_i = \frac{1}{N} \sum_{j=1}^N  \text{SWS}_{\ell} ({M_{k+i}})[j] - T_i[j]
+  b_i = \frac{1}{N} \sum_{j=1}^N  \text{SWS}_{\ell} ({M_{k_i}})[j] - T_i[j]
 \end{equation}
 
-the rescaled target $\hat{T}$ is then defined as $\hat{T_i}[j] = a_i T_i[j] + b_i$.  Unfortunately, we do lose relative scale information between the components, but we will explain how to hide and recover this in Section~\ref{sec:componentscales}
+the rescaled target coordinate $\hat{T_i}$ is then defined as $\hat{T_i}[j] = a_i T_i[j] + b_i$.  Unfortunately, we lose relative scale information between the components, but we will explain how to hide and recover this in Section~\ref{sec:componentscales}
 
-\subsubsection{Viterbi Re-Parameterization}
-Beyond shifting and scaling the targets coordinates vertically, we may also need to re-parameterize them in time, since, in general, the SWS-STFT sequence will not have the same number of samples as the target $T$.  Let $M$ be the number of samples of the SW-STFT and $N$ be the number of samples of the target, and assume that $N > M$ (we can always resample our target curves to make this true). 
-
-\begin{figure}
-  \centering
-  \includegraphics[width=\columnwidth]{Viterbi.pdf}
-  \caption{Starting at a different place on the target loop and traversing it at a non-uniform speed traces out the same shape, while matching the given SW-STFT better.}
-  \label{fig:ViterbiWarp}
-\end{figure}
+\subsubsection{Viterbi Target Re-Parameterization}
 
 
 \algrenewcommand\algorithmicindent{0.8em}%
 \begin{algorithm}
-  \caption{Stipple Tunes Algorithm}
+  \caption{Viterbi Target Re-Parameterization}
 
   \begin{algorithmic}[1]
-    \Procedure{StippleTune}{$Z$, $x$, na, win, tw} \Comment{$Z$ is stipple, $x$ is audio samples, {\em na} is number of discrete angle states, {\em win} is number of samples between angle states, and {\em tw} is amount by which angle can jump each step}
-    \State $N \gets \text{len}(x)$ \Comment{Number of audio samples}
-    \State $Y \gets x + ix$
-    \State Setup a KDTree {\em tree} for fast NN queries on $Z$
-    \State $M \gets \text{ceil}(N / \text{win})$
-    \State $C[i, 0] \gets 0, C[i, j > 1] \gets \infty$ \Comment{$na \times M$ Cumulative cost matrix}
-    \State $I[i, j] \gets 0$ \Comment{$na \times M$ backpointers to best preceding state}
-    \For{$t = 2:M$}
-        \For{$j = 1:na$}
-            \State $\theta_j \gets 2 \pi j / \text{na}$
-            \For{$k = j-\text{tw}:j-1 \mod \text{na}$}
-                \State $\theta_k \gets 2 \pi k / \text{na}$ \label{lst:line:interpolate}
-                \State Let $\theta_{\ell} \gets \theta_j + (\theta_k-\theta_j)/\text{win}$ 
-                \State $d \gets \sum_{\ell = 1}^{\text{win}} \text{tree.query}(Y[\text{win}*t + \ell] e^{i \theta_{\ell}})$ \Comment{Sum nearest neighbors of all points}
-                \If{$C[k, t-1] + d < C[j, t]$}
-                    \State $C[j, t] \gets C[k, t-1] + d$ 
-                    \State $I[j, t] \gets k$  \Comment{Remember optimal transition}
-                \EndIf
-            \EndFor
+    \Procedure{ViterbiTargetReparam}{$\hat{T}$, $\text{SWS}_{\ell} ({M})$, $K$}
+    \State $N_T \gets \text{len}(\hat{T})$ \Comment{Number of target points}
+    \State $N_M \gets \text{len}(\text{SWS}_{\ell}({M}))$ \Comment{Number of SW-STFT frames}
+    \State $S[i, j] \gets 0$ \Comment{$N_T \times N_M$ Cumulative cost matrix}
+    \State $S[1, j] \gets \sum_{i=1}^d (\hat{T}_i[1] - \text{SWS}_{\ell} ({M_{k_i}})[j])^2$
+    \State $B[i, j] \gets 0$ \Comment{$N_T \times N_M$ backpointers to best preceding states}
+    \For{$j = 2:N_M$}
+        \For{$t = 1:N_T$}
+            \State $S[t, j] = \min_{k=(t-K) \mod N_T} ^ {k=(t-1) \mod N_T} S[k, j-1] $ \Comment {Find best preceding state}
+            \State $S[t, j] \gets S[t, j] + \sum_{i=1}^d (\hat{T}_i[t] - \text{SWS}_{\ell} ({M_{k_i}})[j])^2$ \Comment{Add on matching cost}
+            \State $B[t, j] = \argmin_{k=(t-K) \mod N_T} ^ {k=(t-1) \mod N_T} S[k, j-1] $ \Comment {Save reference to best preceding state}
         \EndFor
-    \EndFor \\
-    \State Backtrace $I$ to obtain the optimal sequence of angle states
-    \State Linearly interpolate between each angle state (line~\ref{lst:line:interpolate}) to compute $\theta[k], k = 1 \text{ to } N$ 
-    \State Let $X_k$ be the nearest neighbor in $Z$ to $Y_k e^{i \theta[k]}$, using {\em tree} to speed up queries \\
-    \Return $X$
+    \EndFor
+    \State Backtrace $B$ to obtain the optimal sequence $\Theta$ \\
+    \Return $\Theta$
     \EndProcedure
   \end{algorithmic}
-  \label{alg:stippletunes}
+  \label{alg:viterbiwarp}
 \end{algorithm}
 
+Beyond shifting and scaling the targets coordinates vertically, we may also need to re-parameterize them in time, since, in general, the SWS-STFT sequence will not have the same number of samples as the shifted target $\hat{T}$.  Furthermore, the target curves are cyclic, so the starting point is arbitrary, nor does it matter if we traverse the curve left or right.  This gives us a lot of freedom in how we choose to re-parameterize the target to best match the signal even before we perturb the signal.  Let $N_M$ be the number of frames in the SW-STFT and $N_T$ be the number of samples of the target, and assume that $N_T > N_M$ (we can always resample our target curves to make this true).  Let $\Theta = \{ \theta_1, \theta_2, \theta_3, \hdots, \theta_{N_M} \}$ be new indices into the target, and let $K > 0$ be a positive integer so that $1 \leq (\theta_i - \theta_{i-1}) \mod N_T \leq K$; that is, $K$ chooses the maximum number of samples by which the target re-parameterization can jump in adjacent time steps.  We seek a $\Theta$ minimizing the following objective function for a $d$-dimensional shifted target $\hat{T}$
+
+\begin{equation}
+  \label{eq:viterbiobj}
+  g(\Theta = \{\theta_1, \theta_2, \hdots, \theta_{N_M}\}) = \sum_{j = 1}^{N_M} \sum_{i=1}^d \left( \text{SWS}_{\ell} ({M_{k_i}})[\theta_j] - \hat{T}_i[j]  \right)^2
+\end{equation}
+
+For a fixed $K$, we use the Viterbi algorithm to obtain a $\Theta$ minimizing Equation~\ref{eq:viterbiobj} in $O(MNK)$ time.  Our use of the Viterbi algorithm for re-parameterizing geometric sequences is similar to the technique for corpus-based concatenative synthesis presented by the authors of \cite{schwarz2007corpus}.  Algorithm~\ref{alg:viterbiwarp} gives more details.  
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\columnwidth]{Viterbi.pdf}
+  \caption{Starting at a different place on the target loop and traversing it at a non-uniform speed traces out the same shape, while matching the given SW-STFT better than a uniform parameterization starting at an artibrary place on the target.}
+  \label{fig:ViterbiWarp}
+\end{figure}
+
+In practice, we re-run the algorithm starting at $K = 1$, and we repeatedly increment $K$ until the optimal $\Theta$ goes through at least one full loop on the target.  Since clockwise or counter-clockwise traversal of the target is arbitrary, we then rerun this procedure again for a reversed version of the sequence and keep the result which minimizes Equation~\ref{eq:viterbiobj}.  As a rule of thumb, we find that having a target curve with about 1.5-2x as many samples as there are SWS-STFT frames gives enough wiggle room for the Viterbi algorithm.  In our experiments in Section~\ref{sec:experiments}, we will generate TSP and Hamiltonian sequences with 2000 samples for our 1200-1300 SWS-STFT frames.  Figure~\ref{fig:ViterbiWarp} shows an example running this algorithm under these conditions on the Usher example in column 3 of Figure~\ref{fig:WindowEffect}.
 
 
-Our use of the Viterbi algorithm for re-parameterizing geometric sequences is related to the technique for corpus-based concatenative synthesis presented by the authors of \cite{schwarz2007corpus}.
 
 
-As a rule of thumb, we find that having a target curve with about 1.5-2x as many samples as there are SWS-STFT frames gives enough wiggle room for the Viterbi algorithm.  In our experiments in Section~\ref{sec:experiments}, we will generate TSP and Hamiltonian sequences with 2000 samples for our 1200-1300 SWS-STFT frames
+
+
 
 \subsection{Storing Component Scales in Phase}
 \label{sec:componentscales}
