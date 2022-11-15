@@ -184,7 +184,21 @@ In addition to 2D TSP tours on stipple patterns on planar images, we also create
 
 \section{Curve Embedding in Audio}
 
-We now introduce our new algorithm for hiding artistic space curves, such as 2D TSP paths (Section~\ref{sec:tsp}) and 3D Hamiltonian paths (Section~\ref{sec:hamiltonian}), in audio.  Before we go into the details, we first define quantitative measurements for measuring the fit to the original audio (Goal~\ref{goal:imperceptible}) and the geometric quality of the hidden curve (Goal~\ref{goal:geomquality}).  Let the original carrier audio be $x_i$ and let the steganography audio be $y_i$.  Then the steganographic signal to noise ratio is define as   
+We now introduce our new algorithm for hiding artistic space curves, such as 2D TSP paths (Section~\ref{sec:tsp}) and 3D Hamiltonian paths (Section~\ref{sec:hamiltonian}), in audio.  Before we go into the details, we first define quantitative measurements for measuring the fit to the original audio (Goal~\ref{goal:imperceptible}) and the geometric quality of the hidden curve (Goal~\ref{goal:geomquality}).  Let the original carrier audio be $x$ and let the steganography audio be $y$, each with $N$ samples.  Then the steganographic signal to noise ratio in decibels (dB) is define as 
+
+\begin{equation}
+  \label{eq:stegsnr}
+   \text{snr}(y|x) = \left( \frac{ \log_{10}\left( \frac{1}{N} \sum_{j=1}^N x_j^2 \right) }{ \log_{10}\left( \frac{1}{N} \sum_{j=1}^N (y_j-x_j)^2 \right) } \right)
+\end{equation}
+
+For our geometric measurement of quality, let $X_i$ be a sequence of $M$ target curve points in $\mathbb{R}^d$ and $Y_i$ be a sequence of $M$ reconstructed points in $\mathbb{R}^d$.  Then the {\em mean geometric distortion} is defined simply as the mean Euclidean distance between these points 
+
+\begin{equation}
+  \label{eq:distortion}
+  \text{distortion}(Y|X) = \frac{1}{M} \sum_{j=1}^M ||X_j - Y_j||_2
+\end{equation}
+
+We seek to find a balance between minimizing Equation~\ref{eq:stegsnr} and Equation~\ref{eq:distortion}.  We now formulate an objective function that trades both of them off.
 
 \subsection{Formulation of Least Squares Problem}
 
@@ -225,7 +239,7 @@ The effect of $\ell$ is to smooth out the noisy time series at each row $k$ of t
 
 
 
-subject to $\hat{M_{k_i, j}} \geq 0$.  In other words, we want the magnitude SW-STFT of a perturbed signal to match the target coordinate as well as possible, while preserving the original audio as well as possible, according to $\lambda$.  A greater $\lambda$ means that the signal will fit the original audio better, at the cost of a noisier curve.  Figure~\ref{fig:LambdaEffect} shows an example of varying $\lambda$.
+subject to $\hat{M_{k_i, j}} \geq 0$.  In other words, we want the magnitude SW-STFT of a perturbed signal to match the target coordinate as well as possible (minimize Equation~\ref{eq:distortion}), while preserving the original audio as well as possible (minimizing Equation~\ref{eq:viterbiobj}), according to $\lambda$.  A greater $\lambda$ means that the signal will fit the original audio better, at the cost of a noisier curve.  Figure~\ref{fig:LambdaEffect} shows an example of varying $\lambda$.
 
 After solving for $\hat{M_{k_i, j}}$, we replace all rows of $M_{k_i}$ with $\hat{M_{k_i}}$, and we perform an inverse STFT of $M e^{i P}$ for the original phases $P$ (Section~\ref{sec:componentscales} will explain when it is necessary to modify the phases as well).  We then save the resulting audio in a compressed format, and recover the hidden signal by loading it in and extracting the corresponding components of the magnitude SW-STFT.
 
@@ -332,7 +346,7 @@ We use the technique presented by the authors of \cite{xiaoxiao_dong_data_2004} 
   \label{fig:FrameAlignments}
 \end{figure}
 
-What we've described so far works for audio that's aligned to each window, but additional work needs to be done to address Goal ~\ref{goal:misalignment} if the audio to decode comes in misaligned.  To this end, we use the fact that the curves don't jump very far from sample to sample; a TSP tour is defined as length-minimizing, and adjacent samples in Hamiltonian cycles on meshes move only between neighboring triangles on the original mesh.  Therefore, if the embedding is frame aligned, the length of the curve should be minimized.  Conversely, if the embedding is not frame aligned, the curve becomes noisy and is more likely to jump around quickly from sample to sample.  Figure~\ref{fig:FrameAlignments}
+What we've described so far works for audio that is aligned to each window, but additional work needs to be done to address Goal ~\ref{goal:misalignment} if the audio to decode comes in misaligned.  To this end, we use the fact that the curves move only slightly between adjacent samples; a TSP tour is defined as length-minimizing, and adjacent samples in Hamiltonian cycles on meshes move only between neighboring triangles on the original mesh.  If the embedding is frame aligned, the length of the curve should be minimized.  Conversely, if the embedding is not frame aligned, the curve becomes noisy and is more likely to jump around quickly from sample to sample.  Therefore, we can pick the alignment which minimizes the length in all possible shifts from $0$ to $win$.  Figure~\ref{fig:FrameAlignments} shows an example.  We will empirically evaluate this in Section~\ref{sec:experiments}.
 
 
 
@@ -380,6 +394,9 @@ We ask questions similar to the authors of \cite{bassia2001robust}.
 Figure~\ref{fig:TurkResults} shows the results.  Mean opinion scores are correlated with $\lambda$, but there's not much of a difference between $\lambda=0.1$ and $\lambda=1$, which suggests using the former as a rule of thumb due to its lower geometric distortion.
 
 \section{Discussion}
+
+
+Talk about how this scheme works for any orthogonal decomposition of the signal and how we tried wavelets
 
 %
 % ---- Bibliography ----
