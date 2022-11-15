@@ -128,11 +128,24 @@ The first step in TSP art is to generate a stipple pattern $X$ to best approxima
 \label{sec:tsp}
 Once a stipple has been established, the next step in TSP art is to ``connect the dots'' with a closed loop that visits each stipple point exactly once, referred to as a ``tour''\footnote{A loop with these properties is otherwise known as a {\em Hamiltonian cycle} on a complete graph over the points}.  A well known objective function for a tour that doesn't ``jump too much'' is the total distance traveled, or the sum of all edge lengths, and a tour that achieves the optimum is known as a {\em traveling salesperson (TSP) tour}.  Since the TSP problem is NP-hard, the authors of  \cite{kaplan2005tsp} use the Concorde TSP solver \cite{applegate2001concorde} for an approximate solution. We opt for a simpler technique that first creates a 2-approximation of a TSP from a depth-first traversal through the minimum spanning tree of the stipple dots, which is a already a 2-approximation of the optimal tour.  We then iteratively improve on this tour via a sequence of 2-opt relaxations \cite{johnson1997traveling}; that is, if for some $i > 1, i < j < N$ the distances between the 4 points $X_i, X_{i+1}, X_j$, and $X_{j+1}$ satisfy
 
+
+\begin{figure}
+  \begin{minipage}[c]{0.6\textwidth}
+    \caption{
+      Every crossing in a tour can be removed with a 2-opt swap to yield a tour of a smaller distance, since, by the triangle inequality, $d(X_i, X_j) + d(X_{i+1}, X_{j+1}) < (a+d) + (b+c) = d(X_i, X_{i+1}) + d(X_j, X_{j+1})$.  This may introduce new crossings (shown in red), but these and other crossings will be resolved in future 2-opt swaps
+    } \label{fig:TwoOpt}
+  \end{minipage}
+  \begin{minipage}[c]{0.38\textwidth}
+    \includegraphics[width=\textwidth]{2Opt.pdf}
+  \end{minipage}\hfill
+  
+\end{figure}
+
 \begin{figure}
   \centering
-  \includegraphics[width=0.5\columnwidth]{2Opt.pdf}
-  \caption{Every crossing in a tour can be removed with a 2-opt swap to yield a tour of a smaller distance, since, by the triangle inequality, $d(X_i, X_j) + d(X_{i+1}, X_{j+1}) < (a+d) + (b+c) = d(X_i, X_{i+1}) + d(X_j, X_{j+1})$.  This may introduce new crossings (shown in red), but these and other crossings will be resolved in future 2-opt swaps.}
-  \label{fig:TwoOpt}
+  
+  \caption{.}
+  \label{}
 \end{figure}
 
 \begin{equation}
