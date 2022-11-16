@@ -176,14 +176,15 @@ class StegCanvas {
         this.mvMatrix = mat4.create();
         this.pMatrix = mat4.create();
         this.camera = new MousePolarCamera(glcanvas.width, glcanvas.height, 0.75);
-        this.farR = 2.0;
+        this.farR = 1.0;
+        this.bbox = [0, 1, 0, 1, 0, 1];
 
         // Decoder parameters
         this.coords = [];
         if (params === undefined) {
             params = {};
         }
-        let defaultParams = {"win":1024, "shift":0, "L":16, "Q":4, "freq1":1, "freq2":2, "freq3":3, "colormap":"Spectral"};
+        let defaultParams = {"win":1024, "shift":0, "L":16, "Q":4, "freq1":1, "freq2":2, "freq3":-1, "colormap":"Spectral"};
         for (let param in defaultParams) {
             if (param in params) {
                 this[param] = params[param];
@@ -368,12 +369,52 @@ class StegCanvas {
         gl.bindBuffer(gl.ARRAY_BUFFER, this.infoBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, info, gl.STATIC_DRAW);
         let shader = this.shader2d;
-        if (dim > 2) {
+        if (dim > 3) {
             shader = this.shader3d;
+            this.centerOnBBox();
         }
         gl.vertexAttribPointer(shader.infoLocation, dim, gl.FLOAT, false, 0, 0);
         this.render();
     }
+
+    /**
+     * Center 3D camera on the bounding box of the curve
+     */
+    centerOnBBox() {
+        const coords = this.coords;
+        this.bbox = [coords[0][0], coords[0][0], 
+                     coords[1][0], coords[1][0],
+                     coords[2][0], coords[2][0]];
+        for (let i = 0; i < this.coords[0].length; i++) {
+            if (coords[0][i] < this.bbox[0]) {
+                this.bbox[0] = coords[0][i];
+            }
+            if (coords[0][i] > this.bbox[1]) {
+                this.bbox[1] = coords[0][i];
+            }
+            if (coords[1][i] < this.bbox[2]) {
+                this.bbox[2] = coords[1][i];
+            }
+            if (coords[1][i] > this.bbox[3]) {
+                this.bbox[3] = coords[1][i];
+            }
+            if (coords[2][i] < this.bbox[4]) {
+                this.bbox[4] = coords[2][i];
+            }
+            if (coords[2][i] > this.bbox[4]) {
+                this.bbox[5] = coords[2][i];
+            }
+        }
+        var dX = this.bbox[1] - this.bbox[0];
+        var dY = this.bbox[3] - this.bbox[2];
+        var dZ = this.bbox[5] - this.bbox[4];
+        this.farR = Math.sqrt(dX*dX + dY*dY + dZ*dZ);
+        this.camera.R = this.farR;
+        this.camera.center = vec3.fromValues(this.bbox[0] + 0.5*dX, this.bbox[2] + 0.5*dY, this.bbox[4] + 0.5*dZ);
+        this.camera.phi = Math.PI/2;
+        this.camera.theta = -Math.PI/2;
+        this.camera.updateVecsFromPolar();
+    };
 
     /**
      * Setup the buffer for a particular colormap
@@ -517,7 +558,7 @@ class StegCanvas {
             this.clickerDraggedCenterScale2D(dX, dY);
         }
         else {
-            this.clickerDraggedPerspective3D(dX, dY);
+            this.clickerDraggedPerspective3D(dX, dY, evt);
         }
         if (this.audioPlayer.paused) {
             requestAnimationFrame(this.render.bind(this));
@@ -548,8 +589,9 @@ class StegCanvas {
      * Update the 3D camera based on a drag event
      * @param {int} dX Change in mouse X coordinate
      * @param {int} dY Change in mouse Y coordinate
+     * @param {MouseEvent} evt Mouse event
      */
-    clickerDraggedPerspective3D(dX, dY) {
+    clickerDraggedPerspective3D(dX, dY, evt) {
         if (this.dragging) {
             if (this.clickType == "MIDDLE") {
                 this.camera.translate(dX, -dY);
