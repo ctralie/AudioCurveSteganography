@@ -56,6 +56,9 @@ void main() {
     gl_FragColor = vec4(v_color, 1);
 }`;
 
+const mat4 = glMatrix.mat4;
+const vec3 = glMatrix.vec3;
+
 
 getMousePos = function(evt) {
     if ('touches' in evt) {
@@ -169,12 +172,18 @@ class StegCanvas {
         this.centervec = [0, 0];
         this.scale = 1;
 
+        // 3D Viewing options
+        this.mvMatrix = mat4.create();
+        this.pMatrix = mat4.create();
+        this.camera = new MousePolarCamera(glcanvas.width, glcanvas.height, 0.75);
+        this.farR = 2.0;
+
         // Decoder parameters
         this.coords = [];
         if (params === undefined) {
             params = {};
         }
-        let defaultParams = {"win":1024, "shift":0, "L":16, "Q":4, "freq1":1, "freq2":2, "freq3":-1, "colormap":"Spectral"};
+        let defaultParams = {"win":1024, "shift":0, "L":16, "Q":4, "freq1":1, "freq2":2, "freq3":3, "colormap":"Spectral"};
         for (let param in defaultParams) {
             if (param in params) {
                 this[param] = params[param];
@@ -281,8 +290,8 @@ class StegCanvas {
         // Step 2: Setup 3D Shader
         let shader3d = getShaderProgram(gl, "stipple", VERT_SRC_3D, FRAG_SRC);
         // Extract uniforms and store them in the shader object
-        shader3d.uCenterUniform = gl.getUniformLocation(shader3d, "uCenter");
-        shader3d.uScaleUniform = gl.getUniformLocation(shader3d, "uScale");
+        shader3d.uPMatrixUniform = gl.getUniformLocation(shader3d, "uPMatrix");
+        shader3d.uMVMatrixUniform = gl.getUniformLocation(shader3d, "uMVMatrix");
         shader3d.uTimeUniform = gl.getUniformLocation(shader3d, "uTime");
         shader3d.uPointSizeUniform = gl.getUniformLocation(shader3d, "uPointSize");
         // Extract the info buffer and store it in the shader object
@@ -398,11 +407,26 @@ class StegCanvas {
         gl.clearColor(1, 1, 1, 1.0);
         gl.clear(gl.COLOR_BUFFER_BIT);
 
-        let shader = this.shader2d;
-        gl.useProgram(shader);
         // Step 1: Setup uniform variables that are sent to the shaders
-        gl.uniform2fv(shader.uCenterUniform, this.centervec);
-        gl.uniform1f(shader.uScaleUniform, this.scale);
+        let shader = null;
+        let dim = 3;
+        if (this.coords.length == 2) {
+            shader = this.shader2d;
+            gl.useProgram(shader);
+            gl.uniform2fv(shader.uCenterUniform, this.centervec);
+            gl.uniform1f(shader.uScaleUniform, this.scale);
+        }
+        else if (this.coords.length > 2) {
+            shader = this.shader3d;
+            dim = 4;
+            gl.useProgram(shader);
+            mat4.perspective(this.pMatrix, 45, gl.viewportWidth / gl.viewportHeight, this.camera.R/100.0, Math.max(this.farR*2, this.camera.R*2));
+            this.mvMatrix = this.camera.getMVMatrix();
+            gl.uniformMatrix4fv(shader.uPMatrixUniform, false, this.pMatrix);
+            gl.uniformMatrix4fv(shader.uMVMatrixUniform, false, this.mvMatrix);
+        }
+        
+        
         let t = this.audioPlayer.currentTime / this.audioPlayer.duration;
         gl.uniform1f(shader.uTime, t);
 
@@ -411,7 +435,7 @@ class StegCanvas {
 
         // Step 2: Bind vertex and time buffers to draw points
         gl.bindBuffer(gl.ARRAY_BUFFER, this.infoBuffer);
-        gl.vertexAttribPointer(shader.infoLocation, 3, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribPointer(shader.infoLocation, dim, gl.FLOAT, false, 0, 0);
         if (!(this.colormap in this.colorBuffers)) {
             this.setupColorBuffer(this.colormap);
         }
@@ -482,7 +506,19 @@ class StegCanvas {
     } 
     clickerDragged(evt) {
         evt.preventDefault();
-        this.clickerDraggedCenterScale(evt);
+        let mousePos = getMousePos(evt);
+        let X = mousePos.X;
+        let Y = mousePos.Y;
+        let dX = X - this.lastX;
+        let dY = Y - this.lastY;
+        this.lastX = X;
+        this.lastY = Y;
+        if (this.coords.length < 3) {
+            this.clickerDraggedCenterScale2D(dX, dY);
+        }
+        else {
+            this.clickerDraggedPerspective3D(dX, dY);
+        }
         if (this.audioPlayer.paused) {
             requestAnimationFrame(this.render.bind(this));
         }
@@ -493,16 +529,10 @@ class StegCanvas {
      * Update the center/scale based on a drag event
      * This assumes that scale, center, and centervec have all
      * been defined
-     * @param {MouseEvent} evt 
+     * @param {int} dX Change in mouse X coordinate
+     * @param {int} dY Change in mouse Y coordinate
      */
-    clickerDraggedCenterScale(evt) {
-        let mousePos = getMousePos(evt);
-        let X = mousePos.X;
-        let Y = mousePos.Y;
-        let dX = X - this.lastX;
-        let dY = Y - this.lastY;
-        this.lastX = X;
-        this.lastY = Y;
+    clickerDraggedCenterScale2D(dX, dY) {
         if (this.dragging) {
             if (this.clickType == "RIGHT") { //Right click
                 this.scale *= Math.pow(1.01, -dY); //Want to zoom in as the mouse goes up
@@ -510,6 +540,34 @@ class StegCanvas {
             else if (this.clickType == "LEFT") {
                 this.centervec[0] -= 2.0*dX/(this.scale*this.glcanvas.width);
                 this.centervec[1] += 2.0*dY/(this.scale*this.glcanvas.height);
+            }
+        }
+    }
+
+    /**
+     * Update the 3D camera based on a drag event
+     * @param {int} dX Change in mouse X coordinate
+     * @param {int} dY Change in mouse Y coordinate
+     */
+    clickerDraggedPerspective3D(dX, dY) {
+        if (this.dragging) {
+            if (this.clickType == "MIDDLE") {
+                this.camera.translate(dX, -dY);
+            }
+            else if (this.clickType == "RIGHT") { //Right click
+                this.camera.zoom(dY); //Want to zoom in as the mouse goes up
+            }
+            else if (this.clickType == "LEFT") {
+                if (evt.ctrlKey) {
+                    this.camera.translate(dX, -dY);
+                }
+                else if (evt.shiftKey) {
+                    this.camera.zoom(dY);
+                }
+                else{
+                    this.camera.orbitLeftRight(dX);
+                    this.camera.orbitUpDown(-dY);
+                }
             }
         }
     }
