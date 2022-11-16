@@ -83,29 +83,29 @@ Traveling Salesperson (TSP) art \cite{bosch2004continuous, kaplan2005tsp,bosch20
 \subsection{Voronoi Stippling}
 \label{sec:stippling}
 
-\begin{algorithm}
-  \caption{Modified Weighted Voronoi Stippling \cite{secord2002weighted}}
-  \begin{algorithmic}[1]
-    \Procedure{VoronoiStipple}{$G$, $N$, $b$, $\sigma$, $f$}
-    \Comment{Grayscale image $G$, $N$ target points, brightness threshold $b$, Canny edge scale $\sigma$, density factor $f$}
-    \State $W_{ij} \gets \min(I_{ij}, b)$
-    \State $W_{ij} \gets W_{ij} - \min(W)$
-    \State $W_{ij} \gets 1 - W_{ij} / \max(W)$
-    \State $C \gets \text{canny}_{\sigma}(I)$ \Comment{1 if on canny edge, 0 otherwise}
-    \State $W_{ij} \gets \max(W_{ij}, C_{ij})$
-    \State  Sample $N$ random points $X \in \mathbb{R}^{N \times 2}$ by density according to $W$
-    \For{$k = 1:10$} \Comment{Lloyd's relaxation iterations}
-        \State \begin{equation}
-          X_i \gets \frac{ \sum_{(i, j) \in A_i} W_{ij} * (i, j) }{\sum_{(i, j) \in A_i} W_{ij}}
-        \end{equation}
-        \Comment{Where $A_i$ is the Voronoi region for point $X_i$}
-    \EndFor \\
-    \State Remove top $N(1-f)$ points from $X$ with furthest distance to their nearest neighbors \\
-    \Return $X$
-    \EndProcedure
-  \end{algorithmic}
-  \label{alg:voronoistipple}
-\end{algorithm}
+% \begin{algorithm}
+%   \caption{Modified Weighted Voronoi Stippling \cite{secord2002weighted}}
+%   \begin{algorithmic}[1]
+%     \Procedure{VoronoiStipple}{$G$, $N$, $b$, $\sigma$, $f$}
+%     \Comment{Grayscale image $G$, $N$ target points, brightness threshold $b$, Canny edge scale $\sigma$, density factor $f$}
+%     \State $W_{ij} \gets \min(I_{ij}, b)$
+%     \State $W_{ij} \gets W_{ij} - \min(W)$
+%     \State $W_{ij} \gets 1 - W_{ij} / \max(W)$
+%     \State $C \gets \text{canny}_{\sigma}(I)$ \Comment{1 if on canny edge, 0 otherwise}
+%     \State $W_{ij} \gets \max(W_{ij}, C_{ij})$
+%     \State  Sample $N$ random points $X \in \mathbb{R}^{N \times 2}$ by density according to $W$
+%     \For{$k = 1:10$} \Comment{Lloyd's relaxation iterations}
+%         \State \begin{equation}
+%           X_i \gets \frac{ \sum_{(i, j) \in A_i} W_{ij} * (i, j) }{\sum_{(i, j) \in A_i} W_{ij}}
+%         \end{equation}
+%         \Comment{Where $A_i$ is the Voronoi region for point $X_i$}
+%     \EndFor \\
+%     \State Remove top $N(1-f)$ points from $X$ with furthest distance to their nearest neighbors \\
+%     \Return $X$
+%     \EndProcedure
+%   \end{algorithmic}
+%   \label{alg:voronoistipple}
+% \end{algorithm}
 
 %\begin{algorithm}
 %  \caption{2-Opt Approximate TSP Tour \cite{johnson1997traveling}}
@@ -122,7 +122,7 @@ Traveling Salesperson (TSP) art \cite{bosch2004continuous, kaplan2005tsp,bosch20
 %  \label{alg:twoopt}
 %\end{algorithm}
 
-The first step in TSP art is to generate a stipple pattern $X$ to best approximate a grayscale image $G$.  Following the authors of \cite{kaplan2005tsp}, we use Secord's technique for Voronoi stippling \cite{secord2002weighted}.  This consists taking an initial sample of points according to some density weights $W$ and then repeatedly moving them closer the weighted centroid of their Voronoi regions (an instance of Lloyd's algorithm) so that they are spread more evenly and look less ``noisy.''  Secord \cite{secord2002weighted} takes the weight $W_{ij}$ at a pixel to be inversely proportional to its brightness, using a weight of $0$ above some brigtness threshold $b$.  This leads more dots to concentrate in darker regions; however, the algorithm may fail to sample any dots along important edges between brighter regions (the authors of \cite{li2011structure} also observed this).   To ameliorate this, we run a Canny edge detector \cite{canny1986computational} on the original image and set the weight of any pixels along an edge to be 1, so that the final weights promote samples both in darker regions and along edges of any kind.  This addition is particularly helpful for line drawings, including images with text (e.g. Figure~\ref{fig:caltech101examples}).  Finally, we include the option to filter out points by density to clean up the stipple before the next step.  Algorithm~\ref{alg:voronoistipple} provides more details.
+The first step in TSP art is to generate a stipple pattern $X$ to best approximate a grayscale image $G$.  Following the authors of \cite{kaplan2005tsp}, we use Secord's technique for Voronoi stippling \cite{secord2002weighted}.  This consists taking an initial sample of points according to some density weights $W$ and then repeatedly moving them closer the weighted centroid of their Voronoi regions (an instance of Lloyd's algorithm) so that they are spread more evenly and look less ``noisy.''  Secord \cite{secord2002weighted} takes the weight $W_{ij}$ at a pixel to be inversely proportional to its brightness, using a weight of $0$ above some brigtness threshold $b$.  This leads more dots to concentrate in darker regions; however, the algorithm may fail to sample any dots along important edges between brighter regions (the authors of \cite{li2011structure} also observed this).   To ameliorate this, we run a Canny edge detector \cite{canny1986computational} on the original image and set the weight of any pixels along an edge to be 1, so that the final weights promote samples both in darker regions and along edges of any kind.  This addition is particularly helpful for line drawings, including images with text (e.g. Figure~\ref{fig:caltech101examples}).  %Algorithm~\ref{alg:voronoistipple} provides more details.
 
 \subsection{Traveling Salesperson Tours}
 \label{sec:tsp}
@@ -139,13 +139,6 @@ Once a stipple has been established, the next step in TSP art is to ``connect th
     \includegraphics[width=\textwidth]{2Opt.pdf}
   \end{minipage}\hfill
   
-\end{figure}
-
-\begin{figure}
-  \centering
-  
-  \caption{.}
-  \label{}
 \end{figure}
 
 \begin{equation}
@@ -413,6 +406,14 @@ Show caltech-101 and meshseg examples
 \end{figure}
 
 As Figure~\ref{fig:ResultsFixedLam} shows, increasing the window length has a positive effect on geometric distortion, while moderate window lengths lead to the best SNR.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.8\columnwidth]{ShiftsExperiment.pdf}
+  \caption{}
+  \label{fig:ShiftsExperiment}
+\end{figure}
+
 
 \subsection{Subjective Listening Experiment}
 
