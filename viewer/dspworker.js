@@ -1,6 +1,7 @@
 onmessage = function(event) {
     const samples = event.data.samples;
     const win = event.data.win;
+    const shift = event.data.shift;
     const L = event.data.L;
     const Q = event.data.Q;
     const freqs = event.data.freqs;
@@ -21,7 +22,7 @@ onmessage = function(event) {
 
     // Step 2: Compute spectrogram at chosen bins
     postMessage({"type":"newTask", "taskString":"Computing spectrogram"});
-    let M = Math.floor(samples.length/win);
+    let M = Math.floor((samples.length-shift)/win);
     let SM = []; // Magnitudes
     let SP = []; // Phases
     for (let i = 0; i < freqs.length; i++) {
@@ -31,8 +32,8 @@ onmessage = function(event) {
             let cosSum = 0;
             let sinSum = 0;
             for (let k = 0; k < win; k++) {
-                cosSum += samples[j*win+k]*cos[i][k];
-                sinSum += samples[j*win+k]*sin[i][k];
+                cosSum += samples[shift+j*win+k]*cos[i][k];
+                sinSum += samples[shift+j*win+k]*sin[i][k];
             }
             SMi[j] = Math.sqrt(cosSum*cosSum + sinSum*sinSum);
             SPi[j] = Math.atan2(sinSum, cosSum);

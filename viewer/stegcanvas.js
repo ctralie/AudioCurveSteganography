@@ -165,13 +165,16 @@ class StegCanvas {
         glcanvas.addEventListener("contextmenu", function(e){ e.stopPropagation(); e.preventDefault(); return false; }); //Need this to disable the menu that pops up on right clicking
         this.colorBuffers = {};
 
-        // Viewing options
+        // 2D Viewing options
+        this.centervec = [0, 0];
+        this.scale = 1;
+
+        // Decoder parameters
+        this.coords = [];
         if (params === undefined) {
             params = {};
         }
-        this.centervec = [0, 0];
-        this.scale = 1;
-        let defaultParams = {"win":1024, "L":16, "Q":4, "freq1":1, "freq2":2, "freq3":-1, "colormap":"Spectral"};
+        let defaultParams = {"win":1024, "shift":0, "L":16, "Q":4, "freq1":1, "freq2":2, "freq3":-1, "colormap":"Spectral"};
         for (let param in defaultParams) {
             if (param in params) {
                 this[param] = params[param];
@@ -227,7 +230,14 @@ class StegCanvas {
         this.progressBar = new ProgressBar();
         this.folder = folder;
         this.stippleSize = 0.2;
-        folder.add(this, "win", 0, this.sr, 1).onChange(this.extractSignal.bind(this));
+        this.winGUI = folder.add(this, "win", 0, this.sr, 1).onChange(this.extractSignal.bind(this));
+        this.shiftGUI = folder.add(this, "shift", 0, this.win, 1).listen().onChange(this.extractSignal.bind(this));
+        this.winGUI.onChange(
+            function(v) {
+                that.shiftGUI.max(v);
+                that.shift = 0;
+            }
+        );
         folder.add(this, "L", 0).onChange(this.extractSignal.bind(this));
         folder.add(this, "Q", 1, 10, 1).onChange(this.extractSignal.bind(this));
         folder.add(this, "freq1", 0, Math.floor(this.win/2), 1).onChange(this.extractSignal.bind(this));
@@ -299,7 +309,7 @@ class StegCanvas {
             if (this.freq3 > -1) {
                 freqs.push(this.freq3);
             }
-            let payload = {samples:that.audioSamples, win:that.win, L:that.L, Q:that.Q, freqs:freqs};
+            let payload = {samples:that.audioSamples, win:that.win, shift:that.shift, L:that.L, Q:that.Q, freqs:freqs};
             worker.postMessage(payload);
             worker.onmessage = function(event) {
                 if (event.data.type == "newTask") {
@@ -313,8 +323,7 @@ class StegCanvas {
                     console.log("Debug: " + event.data.taskString);
                 }
                 else if (event.data.type == "end") {
-                    let coords = event.data.coords;
-                    that.coords = coords;
+                    that.coords = event.data.coords;
                     that.colorBuffers = {};
                     that.setupBuffers();
                     resolve();
@@ -347,7 +356,6 @@ class StegCanvas {
             }
             info[(i+1)*dim-1] = i/N;
         }
-        console.log(info);
         gl.bindBuffer(gl.ARRAY_BUFFER, this.infoBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, info, gl.STATIC_DRAW);
         let shader = this.shader2d;
