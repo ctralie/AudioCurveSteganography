@@ -11,4 +11,4 @@ tuneInput.addEventListener('change', function(e) {
     reader.readAsArrayBuffer(tuneInput.files[0]);
 });
 
-audio.loadFile("examples/usher-baby-2d.mp3", canvasArea);
+audio.loadFile("examples/usher-baby-2d-fac0.1.mp3", canvasArea);

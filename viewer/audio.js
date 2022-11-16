@@ -85,7 +85,7 @@ class SampledAudio {
         canvas.width=width;
         canvas.height=width;
         canvasArea.appendChild(canvas);
-        that.stegCanvas = new StegCanvas2D(canvas, that.audioPlayer, that.channels[0], that.sr, folder, params);
+        that.stegCanvas = new StegCanvas(canvas, that.audioPlayer, that.channels[0], that.sr, folder, params);
         resolve();
       });
     });

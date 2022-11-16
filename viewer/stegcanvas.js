@@ -21,6 +21,30 @@ void main() {
   v_color = a_color;
 }`;
 
+
+
+const VERT_SRC_3D = `
+attribute vec4 a_info;
+attribute vec3 a_color;
+
+// Uniforms set from Javascript that are constant
+// over all fragments
+uniform mat4 uMVMatrix; // Where the origin (0, 0) is on the canvas
+uniform mat4 uPMatrix;
+uniform float uPointSize; // Size to draw points
+
+varying float v_time;
+varying vec3 v_color;
+
+void main() {
+  gl_PointSize = uPointSize;
+  vec4 a_position = vec4(a_info.x, a_info.y, a_info.z, 1.0);
+  gl_Position = uPMatrix * uMVMatrix * a_position;
+  v_time = a_info.w;
+  v_color = a_color;
+}`;
+
+
 const FRAG_SRC = `
 precision highp float;
 
@@ -123,7 +147,7 @@ function getShaderProgramAsync(gl, prefix) {
     });
 }
 
-class StegCanvas2D {
+class StegCanvas {
     /**
      * 
      * @param {DOM Element} glcanvas Handle to GL Canvas
@@ -147,7 +171,7 @@ class StegCanvas2D {
         }
         this.centervec = [0, 0];
         this.scale = 1;
-        let defaultParams = {"win":1024, "L":16, "Q":4, "freq1":1, "freq2":2, "colormap":"Spectral"};
+        let defaultParams = {"win":1024, "L":16, "Q":4, "freq1":1, "freq2":2, "freq3":-1, "colormap":"Spectral"};
         for (let param in defaultParams) {
             if (param in params) {
                 this[param] = params[param];
@@ -164,7 +188,7 @@ class StegCanvas2D {
             glcanvas.gl.viewportHeight = glcanvas.height;
             this.glcanvas = glcanvas;
             this.setupMenus(folder, colormap);
-            this.loadShader();
+            this.loadShaders();
             this.setupMouseHandlers();
             this.extractSignal();
             const repaint = () => {requestAnimationFrame(that.render.bind(that));};
@@ -208,6 +232,7 @@ class StegCanvas2D {
         folder.add(this, "Q", 1, 10, 1).onChange(this.extractSignal.bind(this));
         folder.add(this, "freq1", 0, Math.floor(this.win/2), 1).onChange(this.extractSignal.bind(this));
         folder.add(this, "freq2", 0, Math.floor(this.win/2), 1).onChange(this.extractSignal.bind(this));
+        folder.add(this, "freq3", -1, Math.floor(this.win/2), 1).onChange(this.extractSignal.bind(this));
         folder.add(this, "stippleSize", 0.1, 4).onChange(repaint);
         let colormapKeys = [];
         for (let key in colormaps) {
@@ -223,23 +248,42 @@ class StegCanvas2D {
     }
 
     /**
-     * Load in the shaders from stipple.frag and stipple.vert
+     * Load in the shaders for 2D and 3D drawing
      */
-    loadShader() {
+    loadShaders() {
         let gl = this.glcanvas.gl;
-        let shader = getShaderProgram(gl, "stipple", VERT_SRC, FRAG_SRC);
+
+        // Step 1: Setup 2D Shader
+        let shader2d = getShaderProgram(gl, "stipple", VERT_SRC, FRAG_SRC);
         // Extract uniforms and store them in the shader object
-        shader.uCenterUniform = gl.getUniformLocation(shader, "uCenter");
-        shader.uScaleUniform = gl.getUniformLocation(shader, "uScale");
-        shader.uTimeUniform = gl.getUniformLocation(shader, "uTime");
-        shader.uPointSizeUniform = gl.getUniformLocation(shader, "uPointSize");
+        shader2d.uCenterUniform = gl.getUniformLocation(shader2d, "uCenter");
+        shader2d.uScaleUniform = gl.getUniformLocation(shader2d, "uScale");
+        shader2d.uTimeUniform = gl.getUniformLocation(shader2d, "uTime");
+        shader2d.uPointSizeUniform = gl.getUniformLocation(shader2d, "uPointSize");
         // Extract the info buffer and store it in the shader object
-        shader.infoLocation = gl.getAttribLocation(shader, "a_info");
-        gl.enableVertexAttribArray(shader.infoLocation);
+        shader2d.infoLocation = gl.getAttribLocation(shader2d, "a_info");
+        gl.enableVertexAttribArray(shader2d.infoLocation);
         // Extract the colormap buffer and store it in the shader object
-        shader.colorLocation = gl.getAttribLocation(shader, "a_color");
-        gl.enableVertexAttribArray(shader.colorLocation);
-        this.shader = shader;
+        shader2d.colorLocation = gl.getAttribLocation(shader2d, "a_color");
+        gl.enableVertexAttribArray(shader2d.colorLocation);
+        this.shader2d = shader2d;
+
+        // Step 2: Setup 3D Shader
+        let shader3d = getShaderProgram(gl, "stipple", VERT_SRC_3D, FRAG_SRC);
+        // Extract uniforms and store them in the shader object
+        shader3d.uCenterUniform = gl.getUniformLocation(shader3d, "uCenter");
+        shader3d.uScaleUniform = gl.getUniformLocation(shader3d, "uScale");
+        shader3d.uTimeUniform = gl.getUniformLocation(shader3d, "uTime");
+        shader3d.uPointSizeUniform = gl.getUniformLocation(shader3d, "uPointSize");
+        // Extract the info buffer and store it in the shader object
+        shader3d.infoLocation = gl.getAttribLocation(shader3d, "a_info");
+        gl.enableVertexAttribArray(shader3d.infoLocation);
+        // Extract the colormap buffer and store it in the shader object
+        shader3d.colorLocation = gl.getAttribLocation(shader3d, "a_color");
+        gl.enableVertexAttribArray(shader3d.colorLocation);
+        this.shader3d = shader3d;
+
+        // Step 3: Create info buffer
         this.infoBuffer = gl.createBuffer();
     }
 
@@ -251,7 +295,11 @@ class StegCanvas2D {
         const progressBar = this.progressBar;
         new Promise((resolve, reject) => {
             const worker = new Worker(DSP_WORKER_PATH);
-            let payload = {samples:that.audioSamples, win:that.win, L:that.L, Q:that.Q, freqs:[this.freq1, this.freq2]};
+            let freqs = [this.freq1, this.freq2];
+            if (this.freq3 > -1) {
+                freqs.push(this.freq3);
+            }
+            let payload = {samples:that.audioSamples, win:that.win, L:that.L, Q:that.Q, freqs:freqs};
             worker.postMessage(payload);
             worker.onmessage = function(event) {
                 if (event.data.type == "newTask") {
@@ -266,8 +314,7 @@ class StegCanvas2D {
                 }
                 else if (event.data.type == "end") {
                     let coords = event.data.coords;
-                    that.x = coords[0];
-                    that.y = coords[1];
+                    that.coords = coords;
                     that.colorBuffers = {};
                     that.setupBuffers();
                     resolve();
@@ -290,17 +337,24 @@ class StegCanvas2D {
     setupBuffers() {
         const gl = this.glcanvas.gl;
         // Setup position and time buffers
-        const N = this.x.length;
-        let info = new Float32Array(N*3);
+        const dim = this.coords.length+1;
+        const N = this.coords[0].length;
+        let info = new Float32Array(N*(dim+1));
         // Finish setting up buffers
         for (let i = 0; i < N; i++) {
-            info[i*3] = this.x[i];
-            info[i*3+1] = this.y[i];
-            info[i*3+2] = i/N;
+            for (let k = 0; k < dim-1; k++) {
+                info[i*dim+k] = this.coords[k][i];
+            }
+            info[(i+1)*dim-1] = i/N;
         }
+        console.log(info);
         gl.bindBuffer(gl.ARRAY_BUFFER, this.infoBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, info, gl.STATIC_DRAW);
-        gl.vertexAttribPointer(this.shader.infoLocation, 3, gl.FLOAT, false, 0, 0);
+        let shader = this.shader2d;
+        if (dim > 2) {
+            shader = this.shader3d;
+        }
+        gl.vertexAttribPointer(shader.infoLocation, dim, gl.FLOAT, false, 0, 0);
         this.render();
     }
 
@@ -309,7 +363,7 @@ class StegCanvas2D {
      * @param {string} key Colormap to use
      */
     setupColorBuffer(key) {
-        const N = this.x.length;
+        const N = this.coords[0].length;
         let C = new Float32Array(N*3);
         for (let i = 0; i < N; i++) {
             let idx = i*colormaps[key].length / N;
@@ -336,7 +390,7 @@ class StegCanvas2D {
         gl.clearColor(1, 1, 1, 1.0);
         gl.clear(gl.COLOR_BUFFER_BIT);
 
-        let shader = this.shader;
+        let shader = this.shader2d;
         gl.useProgram(shader);
         // Step 1: Setup uniform variables that are sent to the shaders
         gl.uniform2fv(shader.uCenterUniform, this.centervec);
@@ -345,7 +399,7 @@ class StegCanvas2D {
         gl.uniform1f(shader.uTime, t);
 
         let N = Math.floor(this.audioPlayer.currentTime*this.sr/this.win);
-        N = Math.min(N, this.x.length);
+        N = Math.min(N, this.coords[0].length);
 
         // Step 2: Bind vertex and time buffers to draw points
         gl.bindBuffer(gl.ARRAY_BUFFER, this.infoBuffer);
