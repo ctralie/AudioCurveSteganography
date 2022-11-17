@@ -40,10 +40,14 @@
 \maketitle              % typeset the header of the contribution
 %
 \begin{abstract}
-The abstract should briefly summarize the contents of the paper in
-15--250 words.
 
-\keywords{Steganography, Traveling Salesperson Art, Hidden Signals}
+  In this work, we create artistic closed loop curves that trace out images and 3D shapes, which we then hide in musical audio as a form of steganography.  We use traveling salesperson art to create artistic plane loops to trace out image contours, and we use Hamiltonian cycles on triangle meshes to create artistic space loops that fill out 3D surfaces. Our embedding scheme is designed to faithfully preserve the geometry of these loops while keeping their presence undetectable to the audio listener. To accomplish this, we hide each dimension of the curve in a different frequency, and we perturb a regularized version of the magnitude of that frequency to best match the target curve at that dimension, while hiding scale information in that frequency's phase.  In the process, we exploit geometric properties of the curves to help to more effectively hide and recover them.  Our scheme is simple and encoding happens efficiently with a nonnegative least squares framework, while decoding is trivial.  We validate our technique quantitatively on large datasets of images and audio, and we show results of a crowd sourced listening test that validate that the hidden information is indeed unobtrusive.
+
+
+
+  
+
+\keywords{Steganography, Traveling Salesperson Art, Hamiltonian Cycles, Audio Processing, Hidden Signals}
 \end{abstract}
 %
 %
@@ -409,7 +413,7 @@ As Figure~\ref{fig:ResultsFixedLam} shows, increasing the window length has a po
 
 \begin{figure}
   \centering
-  \includegraphics[width=0.8\columnwidth]{ShiftsExperiment.pdf}
+  \includegraphics[width=\columnwidth]{ShiftsExperiment.pdf}
   \caption{}
   \label{fig:ShiftsExperiment}
 \end{figure}
