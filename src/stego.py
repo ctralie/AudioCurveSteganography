@@ -374,6 +374,8 @@ class StegoSolver:
                 a = np.std(signal)/np.std(target[path])
                 b = np.mean(signal-a*self.targets[i][path])
                 self.targets[i] = a*self.targets[i] + b
+                if np.min(self.targets[i]) < 0:
+                    self.targets[i] -= np.min(self.targets[i])
                 diff += np.sum((target[path]-signal)**2)
             #print("Diff Before Viterbi", diff)
         if do_viterbi:
@@ -388,6 +390,8 @@ class StegoSolver:
                     a = np.std(signal)/np.std(target[path])
                     b = np.mean(signal-a*self.targets[i][path])
                     self.targets[i] = a*self.targets[i] + b
+                    if np.min(self.targets[i]) < 0:
+                        self.targets[i] -= np.min(self.targets[i])
                     diff += np.sum((target[path]-signal)**2)
                 #print("Diff After Viterbi", diff)
         if len(path) > 0:
