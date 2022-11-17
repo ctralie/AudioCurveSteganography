@@ -52,7 +52,7 @@
 %
 %
 %
-\section{Introduction}
+\section{Introduction / Background}
 
 
 Steganography is the process of hiding one data stream ``in plain sight'' within another data stream known as a ``carrier.''  In this work, we are interested in using audio as a carrier to store images, which has been relatively unexplored in the academic literature (Section~\ref{sec:priorwork}).  As with any stegonographic technique, people can use this as a general means of covert communication, but it can also be used for artists to hide images and to watermark their tunes.  One such example occurred when Aphex Twin embedded a face image inside the spectrogram of their ``Windowlicker'' song \cite{mathews2004music}, though the technique yields very loud, inharmonic, scratchy sounds.  By contrast, we seek an embedding of the image that is undetectable.  Like Aphex Twin, however, we would like the image to survive lossy audio compression so that people can communicate their images via social media, which makes the problem significantly more challenging.
@@ -60,7 +60,7 @@ Steganography is the process of hiding one data stream ``in plain sight'' within
 To make our audio steganography system as robust and usable as possible, we have the following design goals:
 \begin{enumerate}
     \item \label{goal:imperceptible} The hidden data should be audibly imperceptible
-    \item \label{goal:geomquality} The hidden data should be faithfully preserved and {\em robust to lossy compression}
+    \item \label{goal:geomquality} The hidden data should be faithfully preserved {\em under lossy compression}
     \item \label{goal:misalignment} The hidden data should be robust to frame misalignment, or it should be possible to recover a frame alignment without any prior information
     \item \label{goal:metadata} No metadata should be required to retrieve the hidden data; (compressed) audio alone should suffice
     \item \label{goal:partial} It should be possible to recover the data partially from partial audio chunks; that is, we don't need to wait for the entire data stream to recover the signal
@@ -76,13 +76,13 @@ Rather than storing images directly in audio, we constrain our problem to hiding
 
 Before we proceed to describing the techniques for constructing artistic curves (Section~\ref{sec:tspart}, Section~\ref{sec:hamiltonian}), and to ultimately hiding them in audio (Section~\ref{sec:methods}), we briefly review adjacent work in the area of audio steganography to put our work in context (for more information, review to these survey articles \cite{djebbar_comparative_2012, dutta_overview_2020}).
 
-As for most other steganographic carriers, the simplest techniques for audio steganography rely on changing the least significant bit of uncompressed encodings (e.g. \cite{cvejic_wavelet_2002}).  Other early works rely on the ``frequency masking'' property of the human auditory system; that is, we don't hear frequencies if they are nearby to other frequencies of a larger magnitude.  Binary data can be stored by controlling the relative amplitude of two frequencies that are masked in this way \cite{gopalan_unified_2009, gopalan2004audio}.  Our technique for hiding dimensions on curves also changes amplitudes of tones in imperceptable ways.  
+As for most other steganographic carriers, the simplest techniques for audio steganography rely on changing the least significant bit of uncompressed encodings (e.g. \cite{cvejic_wavelet_2002}).  Other early works rely on the ``frequency masking'' property of the human auditory system.  Binary data is stored by controlling the relative amplitude of two frequencies that are masked in this way \cite{gopalan_unified_2009, gopalan2004audio}.
 
-Beyond amplitude perturbations, it is also possible to keep the amplitudes fixed and to change the phases \cite{xiaoxiao_dong_data_2004, hwan_sik_yun_acoustic_2010}; the technique of \cite{malik_robust_2007} was particularly successful at this by manipulating the poles of allpass filters to encode binary data.  One can also hide binary data by adding and manipulating echoes of a signal \cite{gruhl1996echo}, which is more robust than other techniques to lossy compression since it is akin to impulse responses of natural environments; however, the bit rate is quite low (on the order of dozens of bits per second).  For another approach to compressed audio, some techniques are able to use the properties of mp3 files directly to hide information \cite{qiao_steganalysis_2009,atoum2013exploring}.  Other techniques adapt wireless transmissions schemes, such as and on-off keying (OOK) \cite{madhavapeddy_audio_2005} (at a low bit rate of 8bps) and orthogonal frequency-division multiplexing (OFDM) \cite{eichelberger_receiving_2019} (at a higher bit rate of closer to 1kbps), to the audio domain.  Some more recent techniques use deep learning \cite{kreuk2020hide, wu2020audio}
+Beyond amplitude perturbations, it is also possible to keep the amplitudes fixed and to change the phases \cite{xiaoxiao_dong_data_2004, hwan_sik_yun_acoustic_2010}; the technique of \cite{malik_robust_2007} was particularly successful at this by manipulating the poles of allpass filters to encode binary data.  One can also hide binary data by adding and manipulating echoes of a signal \cite{gruhl1996echo}, which is more robust than other techniques to lossy compression since it is akin to impulse responses of natural environments; however, the bit rate is quite low (on the order of dozens of bits per second).  For another approach to compressed audio, some techniques are able to use the properties of mp3 files directly to hide information \cite{qiao_steganalysis_2009,atoum2013exploring}.  Other techniques adapt wireless transmissions schemes, such as and on-off keying (OOK) \cite{madhavapeddy_audio_2005} (at a low bit rate of 8bps) and orthogonal frequency-division multiplexing (OFDM) \cite{eichelberger_receiving_2019} (at a higher bit rate of closer to 1kbps), to the audio domain.
 
-Most of the hidden messages in the audio steganography literature are in binary format, but a few recent works have focused on hiding images specifically using deep learning \cite{cui_multi-stage_2021, geleta_pixinwav_2021, takahashi_source_2022}.  We have a similar perspective that rather than attempting to extract binary sequences exactly, we can
+Most of the hidden messages in the audio steganography literature are in binary format, but a few recent works have focused on hiding images pixels using deep learning to train networks to a ``hiding network'' and a ``reveal network'' to work in tandem ot encode an image in an audio stream and then to decode its addition into the carrier, respectively, while maximizing quality of the decoded image and the encoded audio \cite{cui_multi-stage_2021, geleta_pixinwav_2021, takahashi_source_2022, domenech2022hiding}.  Not only do we also attempt to hide images, but we have a similar perspective that rather than attempting to extract binary sequences exactly, we can tolerate progressive noise in the reconstructions.  Challenges of deep-learning based approaches include the need to extensively train on examples, the difficulty of including a loss term that can model the effect of lossy audio compression, and the difficulty of training to be robust to frame misalignment (Goal~\ref{goal:misalignment}).  We sidestep these challenges in our work by using a simple model based on hiding in frequencies.
 
-\section{Traveling Salesperson Art}
+\subsection{Traveling Salesperson Art}
 \label{sec:tspart}
 
 \begin{figure}
@@ -92,11 +92,7 @@ Most of the hidden messages in the audio steganography literature are in binary 
   \label{fig:TSPTour}
 \end{figure}
 
-To devise 2D curves that stand in for images, we turn to the technique of  Traveling Salesperson (TSP) art \cite{bosch2004continuous, kaplan2005tsp,bosch2008connecting}, which is an automated artistic line drawing pipeline which computes a {\em simple closed loop} to approximate a source image.  ``Simple'' in this context does not imply a lack of complexity; rather, it means that a curve does not intersect itself (see, for example, the Jordan Curve Theorem \cite{bosch2009jordan}).  To construct such a curve, we first place a collection of dots in the plane in a ``stipple pattern'' to approximate brightness in the image (e.g. more dots concentrate in darker regions), and then connect them in a loop via an approximate traveling salesperson (TSP) tour.  Figure~\ref{fig:TSPTour} shows an example.  We follow the TSP Art technique of \cite{kaplan2005tsp}, with a few modifications, as described below.
-
-
-\subsection{Voronoi Stippling}
-\label{sec:stippling}
+To devise 2D curves that stand in for images, we use Traveling Salesperson (TSP) art \cite{bosch2004continuous, kaplan2005tsp,bosch2008connecting}, which is an automated artistic line drawing pipeline which computes a {\em simple closed loop} to approximate a source image.  ``Simple'' in this context does not imply a lack of complexity; rather, it means that a curve does not intersect itself (see, for example, the Jordan Curve Theorem \cite{bosch2009jordan}).  To construct such a curve, we first place a collection of dots in the plane in a ``stipple pattern'' to approximate brightness in the image (e.g. more dots concentrate in darker regions), and then connect them in a loop via an approximate traveling salesperson (TSP) tour.  Figure~\ref{fig:TSPTour} shows an example.  We follow the TSP Art technique of \cite{kaplan2005tsp}, with a few modifications, as described below.
 
 % \begin{algorithm}
 %   \caption{Modified Weighted Voronoi Stippling \cite{secord2002weighted}}
@@ -137,60 +133,64 @@ To devise 2D curves that stand in for images, we turn to the technique of  Trave
 %  \label{alg:twoopt}
 %\end{algorithm}
 
-The first step in TSP art is to generate a stipple pattern $X$ to best approximate a grayscale image $G$.  Following the authors of \cite{kaplan2005tsp}, we use Secord's technique for Voronoi stippling \cite{secord2002weighted}.  This consists taking an initial sample of points according to some density weights $W$ and then repeatedly moving them closer the weighted centroid of their Voronoi regions (an instance of Lloyd's algorithm) so that they are spread more evenly and look less ``noisy.''  Secord \cite{secord2002weighted} takes the weight $W_{ij}$ at a pixel to be inversely proportional to its brightness, using a weight of $0$ above some brigtness threshold $b$.  This leads more dots to concentrate in darker regions; however, the algorithm may fail to sample any dots along important edges between brighter regions (the authors of \cite{li2011structure} also observed this).   To ameliorate this, we run a Canny edge detector \cite{canny1986computational} on the original image and set the weight of any pixels along an edge to be 1, so that the final weights promote samples both in darker regions and along edges of any kind.  This addition is particularly helpful for line drawings, including images with text (e.g. Figure~\ref{fig:caltech101examples}).  %Algorithm~\ref{alg:voronoistipple} provides more details.
+The first step in TSP art is to generate a stipple pattern $X$ to best approximate a grayscale image $G$.  Following the authors of \cite{kaplan2005tsp}, we use Secord's technique for Voronoi stippling \cite{secord2002weighted}, which takes an initial sample of points according to some density weights $W$ and then repeatedly moves them closer the weighted centroid of their Voronoi regions (an instance of Lloyd's algorithm) so that they are spread more evenly.  Secord \cite{secord2002weighted} takes the weight $W_{ij}$ at a pixel to be inversely proportional to its brightness, using a weight of $0$ above some brigtness threshold $b$.  This leads more dots to concentrate in darker regions; however, the algorithm may fail to sample any dots along important edges between brighter regions (the authors of \cite{li2011structure} also observed this).  To mitigate this, we run a Canny edge detector \cite{canny1986computational} on the original image and set the weight of any pixels along an edge to be 1, so that the final weights promote samples both in darker regions and along edges of any kind.  This addition is particularly helpful for line drawings.  %Algorithm~\ref{alg:voronoistipple} provides more details.
 
-\subsection{Traveling Salesperson Tours}
-\label{sec:tsp}
 Once a stipple has been established, the next step in TSP art is to ``connect the dots'' with a closed loop that visits each stipple point exactly once, referred to as a ``tour''\footnote{A loop with these properties is otherwise known as a {\em Hamiltonian cycle} on a complete graph over the points}.  A well known objective function for a tour that doesn't ``jump too much'' is the total distance traveled, or the sum of all edge lengths, and a tour that achieves the optimum is known as a {\em traveling salesperson (TSP) tour}.  Since the TSP problem is NP-hard, the authors of  \cite{kaplan2005tsp} use the Concorde TSP solver \cite{applegate2001concorde} for an approximate solution. We opt for a simpler technique that first creates a 2-approximation of a TSP from a depth-first traversal through the minimum spanning tree of the stipple dots, which is a already a 2-approximation of the optimal tour.  We then iteratively improve on this tour via a sequence of 2-opt relaxations \cite{johnson1997traveling}; that is, if for some $i > 1, i < j < N$ the distances between the 4 points $X_i, X_{i+1}, X_j$, and $X_{j+1}$ satisfy
 
 
-\begin{figure}
-  \begin{minipage}[c]{0.6\textwidth}
-    \caption{
-      Every crossing in a tour can be removed with a 2-opt swap to yield a tour of a smaller distance, since, by the triangle inequality, $d(X_i, X_j) + d(X_{i+1}, X_{j+1}) < (a+d) + (b+c) = d(X_i, X_{i+1}) + d(X_j, X_{j+1})$.  This may introduce new crossings (shown in red), but these and other crossings will be resolved in future 2-opt swaps
-    } \label{fig:TwoOpt}
-  \end{minipage}
-  \begin{minipage}[c]{0.38\textwidth}
-    \includegraphics[width=\textwidth]{2Opt.pdf}
-  \end{minipage}\hfill
+% \begin{figure}
+%   \begin{minipage}[c]{0.6\textwidth}
+%     \caption{
+%       Every crossing in a tour can be removed with a 2-opt swap to yield a tour of a smaller distance, since, by the triangle inequality, $d(X_i, X_j) + d(X_{i+1}, X_{j+1}) < (a+d) + (b+c) = d(X_i, X_{i+1}) + d(X_j, X_{j+1})$.  This may introduce new crossings (shown in red), but these and other crossings will be resolved in future 2-opt swaps
+%     } \label{fig:TwoOpt}
+%   \end{minipage}
+%   \begin{minipage}[c]{0.38\textwidth}
+%     \includegraphics[width=\textwidth]{2Opt.pdf}
+%   \end{minipage}\hfill
   
-\end{figure}
+% \end{figure}
 
 \begin{equation}
   d(X_i, X_j) + d(X_{i+1}, X_{j+1}) < d(X_i, X_{i+1}) + d(X_j, X_{j+1})
 \end{equation}
 
-then it is possible to perform a swap to yield a new tour with a smaller distance.  This amounts to reversing the indices in the tour between index $i+1$ and $j$, inclusive.  We repeat this step as long as such a swap is still possible.  Though this is not guaranteed to yield an optimal TSP tour, it does produce tours which are simple; that is, every crossing is removed (Figure~\ref{fig:TwoOpt}).
+then it is possible to perform a swap to yield a new tour with a smaller distance.  This amounts to reversing the indices in the tour between index $i+1$ and $j$, inclusive.  We repeat this step as long as such a swap is still possible.  Though this is not guaranteed to yield an optimal TSP tour, it does produce tours which are simple; that is, every crossing is removed.% (Figure~\ref{fig:TwoOpt}).
 
 
-\subsection{Curvature Shortening Flow}
+\subsubsection{Curvature Shortening Flow}
 
 \begin{figure}
-  \centering
-  \includegraphics[width=\columnwidth]{CurvatureShortening.png}
-  \caption{Anticipating that mp3 compression will introduce noise to our embedded curves, we pre-smooth them before hiding them using one iteration of curvature-shortening flow, which smooths the curves without introducing any crossings.  We find $\sigma=1$ to be a good tradeoff between smoothness and detail.}
-  \label{fig:CurvatureShortening}
+  \begin{minipage}[c]{0.4\textwidth}
+    \caption{
+      Anticipating that mp3 compression will introduce noise to our embedded curves, we pre-smooth them before hiding them using one iteration of curvature-shortening flow at $\sigma=1$, which smooths the curves without introducing any crossings.
+    } \label{fig:CurvatureShortening}
+  \end{minipage}
+  \begin{minipage}[c]{0.6\textwidth}
+    \includegraphics[width=\columnwidth]{CurvatureShortening.png}
+  \end{minipage}\hfill
+  
 \end{figure}
 
+% In particular, let 
+% \begin{equation}
+%   g_{\sigma}[j] = c_1 e^{-j^2 / (2 \sigma^2)}, 
+%   g'_{\sigma}[j] = - c_2 \frac{j}{\sigma^2} e^{-j^2 / (2 \sigma^2)}
+% \end{equation}
 
-Since mp3 compression introduces noise into our embedded curves, we smooth them before embedding to improve visual quality.  To this end, we apply a numerical version of curvature shortening flow described by Mokhtarian and Mackworth \cite{mokhtarian1992theory} which applies to piecewise linear curves (like our TSP tours).  The technique works by numerically by convolving coordinates of each curve with smoothed versions of Gaussians and their derivatives.  In particular, let 
-\begin{equation}
-  g_{\sigma}[j] = c_1 e^{-j^2 / (2 \sigma^2)}, 
-  g'_{\sigma}[j] = - c_2 \frac{j}{\sigma^2} e^{-j^2 / (2 \sigma^2)}
-\end{equation}
+% where $c_1$ and $c_2$ are appropriate normalization constants.  Then we estimate the arc length of a sampled curve $\gamma[j]$ with the rectangular integral of a smoothed velocity estimate:
 
-where $c_1$ and $c_2$ are appropriate normalization constants.  Then we estimate the arc length of a sampled curve $\gamma[j]$ with the rectangular integral of a smoothed velocity estimate:
+% \begin{equation}
+%   \label{eq:arclen}
+%   s_{\sigma}[j] = \sum_{k=1}^j |(\gamma * g'_{\sigma})[k]|
+% \end{equation}
 
-\begin{equation}
-  \label{eq:arclen}
-  s_{\sigma}[j] = \sum_{k=1}^j |(\gamma * g'_{\sigma})[k]|
-\end{equation}
+Since mp3 compression introduces noise into our embedded curves, we smooth them before embedding to improve visual quality.  To this end, we apply a numerical version of curvature shortening flow described by Mokhtarian and Mackworth \cite{mokhtarian1992theory} which applies to piecewise linear curves (like our TSP tours).  The technique works by numerically by convolving coordinates of each curve with smoothed versions of Gaussians and their derivatives.  
 
-To approximately smooth a curve via one step of curvature-shortening flow, Mokhtarian and Mackworth \cite{mokhtarian1992theory} show that it suffices to first re-parameterize by the arc length $s_{\sigma}$ in Equation~\ref{eq:arclen}, and then to smooth the curve by convolving with $g_{\sigma}$.  The beauty of convolving with Gaussians as such is that $\gamma$ does not even have to be differentiable, so this works on our piecewise linear TSP tours.  Furthermore, by the Gage-Hamilton-Grayson theorem, simple curves that undergo curvature shortening flow {\em remain simple} and eventually become convex, shrinking to a point under repeated applications of the flow.  Figure~\ref{fig:CurvatureShortening} shows an example of one application of curvature shortening flow for different $\sigma$ values.
+To approximately smooth a curve via one step of curvature-shortening flow, Mokhtarian and Mackworth \cite{mokhtarian1992theory} show that it suffices to first re-parameterize by the arc length, and then to smooth the curve by convolving with once with a Gaussian\footnote{The beauty of convolving with Gaussians as such is that $\gamma$ does not even have to be differentiable, so this works on our piecewise linear TSP tours.}.  By the Gage-Hamilton-Grayson theorem, simple curves that undergo curvature shortening flow {\em remain simple} and eventually become convex, shrinking to a point under repeated applications of the flow.  Figure~\ref{fig:CurvatureShortening} shows an example of one application of curvature shortening flow for different $\sigma$ values.
 
 
 
-\section{Hamiltonian Paths on Watertight Triangle Meshes}
+\subsection{Hamiltonian Paths on Watertight Triangle Meshes}
 \label{sec:hamiltonian}
 
 \begin{figure}
@@ -206,19 +206,14 @@ In addition to 2D TSP tours on stipple patterns on planar images, we also create
 \section{Curve Embedding in Audio}
 \label{sec:methods}
 
-We now introduce our new algorithm for hiding artistic space curves, such as 2D TSP paths (Section~\ref{sec:tsp}) and 3D Hamiltonian paths (Section~\ref{sec:hamiltonian}), in audio.  Before we go into the details, we first define quantitative measurements for measuring the fit to the original audio (Goal~\ref{goal:imperceptible}) and the geometric quality of the hidden curve (Goal~\ref{goal:geomquality}).  Let the original carrier audio be $x$ and let the steganography audio be $y$, each with $N$ samples.  Then we define the steganographic signal to noise ratio in decibels (dB) as 
+We now introduce our new algorithm for hiding artistic space curves in audio.  Before we go into the details, we first define quantitative measurements for measuring the fit to the original audio (Goal~\ref{goal:imperceptible}) and the geometric quality of the hidden curve (Goal~\ref{goal:geomquality}).  Let the original carrier audio be $x$ and let the steganography audio be $y$, each with $N$ samples.  Then we define the steganographic signal to noise ratio in decibels (dB) as 
 
 \begin{equation}
   \label{eq:stegsnr}
    \text{snr}(y|x) = 10  \log_{10} \left(\sum_{j=1}^N x_j^2 \right) -  10 \log_{10}\left(\sum_{j=1}^N (y_j-x_j)^2  \right)
 \end{equation}
 
-For our geometric measurement of quality, let $X_i$ be a sequence of $M$ target curve points in $\mathbb{R}^d$ and $Y_i$ be a sequence of $M$ reconstructed points in $\mathbb{R}^d$.  Then we define the {\em mean geometric distortion} is simply as the mean Euclidean distance between these points 
-
-\begin{equation}
-  \label{eq:distortion}
-  \text{distortion}(Y|X) = \frac{1}{M} \sum_{j=1}^M ||X_j - Y_j||_2
-\end{equation}
+For our geometric measurement of quality, let $X_i$ be a sequence of $M$ target curve points in $\mathbb{R}^d$ and $Y_i$ be a sequence of $M$ reconstructed points in $\mathbb{R}^d$.  Then we define the {\em mean geometric distortion} is simply as the mean Euclidean distance between these points: $\text{distortion}(Y|X) = \frac{1}{M} \sum_{j=1}^M ||X_j - Y_j||_2$.
 
 
 \subsection{Formulation of Least Squares Problem}
@@ -247,15 +242,15 @@ The effect of $\ell$ is to smooth out the noisy rows $k_i$ of the magnitude spec
 
 \begin{figure}
   \centering
-  \includegraphics[width=\columnwidth]{WindowEffect.pdf}
-  \caption{This figure shows the effect of varying $\ell$ for a fixed $\lambda=0.1$, using the lowest two non-DC frequencies to embed each coordinate.  A larger $\ell$ for the SW-STFT in Equation~\ref{eq:objfn} leads to smoother curves which are more likely to survive compression, but an $\ell$ that's too large may over-smooth.}
+  \includegraphics[width=0.8\columnwidth]{WindowEffect.pdf}
+  \caption{Varying $\ell$ for a fixed $\lambda=0.1$, using the lowest two non-DC frequencies to carry.  A larger $\ell$ for the SW-STFT in Equation~\ref{eq:objfn} leads to smoother curves which are more likely to survive compression, but an $\ell$ that's too large may over-smooth.}
   \label{fig:WindowEffect}
 \end{figure}
 
 \begin{figure}
   \centering
-  \includegraphics[width=\columnwidth]{LambdaEffect.pdf}
-  \caption{This figure shows the effect of varying $\lambda$ for a fixed $\ell=16$, embedding using the lowest two non-DC frequencies to.  A smaller $\lambda$ in Equation~\ref{eq:objfn} leads to higher geometric fidelity (Goal~\ref{goal:geomquality}), at the cost of audio quality (Goal~\ref{goal:imperceptible}), as measured by SNR.}
+  \includegraphics[width=0.8\columnwidth]{LambdaEffect.pdf}
+  \caption{Varying $\lambda$ for a fixed $\ell=16$.  A smaller $\lambda$ in Equation~\ref{eq:objfn} leads to higher geometric fidelity (Goal~\ref{goal:geomquality}), at the cost of audio quality (Goal~\ref{goal:imperceptible}), as measured by SNR.}
   \label{fig:LambdaEffect}
 \end{figure}
 
