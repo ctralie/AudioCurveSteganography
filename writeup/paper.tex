@@ -41,7 +41,7 @@
 %
 \begin{abstract}
 
-  In this work, we create artistic closed loop curves that trace out images and 3D shapes, which we then hide in musical audio as a form of steganography.  We use traveling salesperson art to create artistic plane loops to trace out image contours, and we use Hamiltonian cycles on triangle meshes to create artistic space loops that fill out 3D surfaces. Our embedding scheme is designed to faithfully preserve the geometry of these loops while keeping their presence undetectable to the audio listener. To accomplish this, we hide each dimension of the curve in a different frequency, and we perturb a regularized version of the magnitude of that frequency to best match the target curve at that dimension, while hiding scale information in that frequency's phase.  In the process, we exploit geometric properties of the curves to help to more effectively hide and recover them.  Our scheme is simple and encoding happens efficiently with a nonnegative least squares framework, while decoding is trivial.  We validate our technique quantitatively on large datasets of images and audio, and we show results of a crowd sourced listening test that validate that the hidden information is indeed unobtrusive.
+  In this work, we create artistic closed loop curves that trace out images and 3D shapes, which we then hide in musical audio as a form of steganography.  We use traveling salesperson art to create artistic plane loops to trace out image contours, and we use Hamiltonian cycles on triangle meshes to create artistic space loops that fill out 3D surfaces. Our embedding scheme is designed to faithfully preserve the geometry of these loops after lossy compression, while keeping their presence undetectable to the audio listener. To accomplish this, we hide each dimension of the curve in a different frequency, and we perturb a regularized version of the magnitude of that frequency to best match the target curve at that dimension, while hiding scale information in that frequency's phase.  In the process, we exploit geometric properties of the curves to help to more effectively hide and recover them.  Our scheme is simple and encoding happens efficiently with a nonnegative least squares framework, while decoding is trivial.  We validate our technique quantitatively on large datasets of images and audio, and we show results of a crowd sourced listening test that validate that the hidden information is indeed unobtrusive.
 
 
 
@@ -55,24 +55,35 @@
 \section{Introduction}
 
 
+Steganography is the process of hiding one data stream ``in plain sight'' within another data stream known as a ``carrier.''  In this work, we are interested in using audio as a carrier to store images, which has been relatively unexplored in the academic literature (Section~\ref{sec:priorwork}).  As with any stegonographic technique, people can use this as a general means of covert communication, but it can also be used for artists to hide images and to watermark their tunes.  One such example occurred when Aphex Twin embedded a face image inside the spectrogram of their ``Windowlicker'' song \cite{mathews2004music}, though the technique yields very loud, inharmonic, scratchy sounds.  By contrast, we seek an embedding of the image that is undetectable.  Like Aphex Twin, however, we would like the image to survive lossy audio compression so that people can communicate their images via social media, which makes the problem significantly more challenging.
 
-Our goals and design constraints are as follows:
+To make our audio steganography system as robust and usable as possible, we have the following design goals:
 \begin{enumerate}
     \item \label{goal:imperceptible} The hidden data should be audibly imperceptible
-    \item \label{goal:geomquality} The hidden data should be faithfully preserved and {\em robust to compression}
+    \item \label{goal:geomquality} The hidden data should be faithfully preserved and {\em robust to lossy compression}
     \item \label{goal:misalignment} The hidden data should be robust to frame misalignment, or it should be possible to recover a frame alignment without any prior information
     \item \label{goal:metadata} No metadata should be required to retrieve the hidden data; (compressed) audio alone should suffice
     \item \label{goal:partial} It should be possible to recover the data partially from partial audio chunks; that is, we don't need to wait for the entire data stream to recover the signal
 \end{enumerate}
 
-Goals ~\ref{goal:imperceptible} and ~\ref{goal:geomquality} are at odds with each other, and satisfying them simultaneously is the biggest challenge of this work.
+Goals ~\ref{goal:imperceptible} and ~\ref{goal:geomquality} are at odds with each other, and satisfying them simultaneously is the biggest challenge of this work.  We formulate an objective function in Section~\ref{sec:formulation} to trade off both of these goals.
 
-Pipeline is simple enough that we have very good intuition for how it's working, and we validate its performance in Section~\ref{sec:experiments}.
+Rather than storing images directly in audio, we constrain our problem to hiding artistic curves that trace out images (Section~\ref{sec:tspart}) or 3D surface shapes (Section~\ref{sec:hamiltonian}).  We hide each dimension of our curve in a different frequency, and we use sliding window sums of the frequency magnitudes to smooth them in time, which makes them more robust to compression, as we show in Section~\ref{sec:experiments}.  Furthermore, since we know that the curves only move by a small amount between adjacent samples in time, we can exploit this fact to recover from frame misalignments to satisfy Goal~\ref{goal:misalignment}, as explained in Section~\ref{sec:framealignments}.  In the end, all of the hidden information needed to reconstruct the curves is stored in the magnitudes and phases of frequencies in the audio, so no metadata is needed (Goal~\ref{goal:metadata}).  Finally, the information needed to recover individual curves samples is localized in time, so the curves can be partially decoded from partial audio (Goal~\ref{goal:partial}).
 
 
 \subsection{Prior Work in Audio Steganography}
+\label{sec:priorwork}
+
+Before we proceed to describing the techniques for constructing artistic curves (Section~\ref{sec:tspart}, Section~\ref{sec:hamiltonian}), and to ultimately hiding them in audio (Section~\ref{sec:methods}), we briefly review adjacent work in the area of audio steganography to put our work in context (for more information, review to these survey articles \cite{djebbar_comparative_2012, dutta_overview_2020}).
+
+As for most other steganographic carriers, the simplest techniques for audio steganography rely on changing the least significant bit of uncompressed encodings (e.g. \cite{cvejic_wavelet_2002}).  Other early works rely on the ``frequency masking'' property of the human auditory system; that is, we don't hear frequencies if they are nearby to other frequencies of a larger magnitude.  Binary data can be stored by controlling the relative amplitude of two frequencies that are masked in this way \cite{gopalan_unified_2009, gopalan2004audio}.  Our technique for hiding dimensions on curves also changes amplitudes of tones in imperceptable ways.  
+
+Beyond amplitude perturbations, it is also possible to keep the amplitudes fixed and to change the phases \cite{xiaoxiao_dong_data_2004, hwan_sik_yun_acoustic_2010}; the technique of \cite{malik_robust_2007} was particularly successful at this by manipulating the poles of allpass filters to encode binary data.  One can also hide binary data by adding and manipulating echoes of a signal \cite{gruhl1996echo}, which is more robust than other techniques to lossy compression since it is akin to impulse responses of natural environments; however, the bit rate is quite low (on the order of dozens of bits per second).  For another approach to compressed audio, some techniques are able to use the properties of mp3 files directly to hide information \cite{qiao_steganalysis_2009,atoum2013exploring}.  Other techniques adapt wireless transmissions schemes, such as and on-off keying (OOK) \cite{madhavapeddy_audio_2005} (at a low bit rate of 8bps) and orthogonal frequency-division multiplexing (OFDM) \cite{eichelberger_receiving_2019} (at a higher bit rate of closer to 1kbps), to the audio domain.  Some more recent techniques use deep learning \cite{kreuk2020hide, wu2020audio}
+
+Most of the hidden messages in the audio steganography literature are in binary format, but a few recent works have focused on hiding images specifically using deep learning \cite{cui_multi-stage_2021, geleta_pixinwav_2021, takahashi_source_2022}.  We have a similar perspective that rather than attempting to extract binary sequences exactly, we can
 
 \section{Traveling Salesperson Art}
+\label{sec:tspart}
 
 \begin{figure}
   \centering
@@ -81,7 +92,7 @@ Pipeline is simple enough that we have very good intuition for how it's working,
   \label{fig:TSPTour}
 \end{figure}
 
-Traveling Salesperson (TSP) art \cite{bosch2004continuous, kaplan2005tsp,bosch2008connecting} is an automated artistic line drawing pipeline which computes a {\em simple closed loop} to approximate a source image.  ``Simple'' in this context does not imply a lack of complexity; rather, it means that a curve does not intersect itself (see, for example, the Jordan Curve Theorem \cite{bosch2009jordan}).  To construct such a curve, we first place a collection of dots in the plane in a ``stipple pattern'' to approximate brightness in the image (e.g. more dots concentrate in darker regions), and then connect them in a loop via an approximate traveling salesperson (TSP) tour.  Figure~\ref{fig:TSPTour} shows an example.  We follow the TSP Art technique of \cite{kaplan2005tsp}, with a few modifications, as described below.
+To devise 2D curves that stand in for images, we turn to the technique of  Traveling Salesperson (TSP) art \cite{bosch2004continuous, kaplan2005tsp,bosch2008connecting}, which is an automated artistic line drawing pipeline which computes a {\em simple closed loop} to approximate a source image.  ``Simple'' in this context does not imply a lack of complexity; rather, it means that a curve does not intersect itself (see, for example, the Jordan Curve Theorem \cite{bosch2009jordan}).  To construct such a curve, we first place a collection of dots in the plane in a ``stipple pattern'' to approximate brightness in the image (e.g. more dots concentrate in darker regions), and then connect them in a loop via an approximate traveling salesperson (TSP) tour.  Figure~\ref{fig:TSPTour} shows an example.  We follow the TSP Art technique of \cite{kaplan2005tsp}, with a few modifications, as described below.
 
 
 \subsection{Voronoi Stippling}
@@ -193,6 +204,7 @@ In addition to 2D TSP tours on stipple patterns on planar images, we also create
 
 
 \section{Curve Embedding in Audio}
+\label{sec:methods}
 
 We now introduce our new algorithm for hiding artistic space curves, such as 2D TSP paths (Section~\ref{sec:tsp}) and 3D Hamiltonian paths (Section~\ref{sec:hamiltonian}), in audio.  Before we go into the details, we first define quantitative measurements for measuring the fit to the original audio (Goal~\ref{goal:imperceptible}) and the geometric quality of the hidden curve (Goal~\ref{goal:geomquality}).  Let the original carrier audio be $x$ and let the steganography audio be $y$, each with $N$ samples.  Then we define the steganographic signal to noise ratio in decibels (dB) as 
 
@@ -210,6 +222,7 @@ For our geometric measurement of quality, let $X_i$ be a sequence of $M$ target 
 
 
 \subsection{Formulation of Least Squares Problem}
+\label{sec:formulation}
 
 We now formulate an objective function that trades off Equation~\ref{eq:stegsnr} and Equation~\ref{eq:distortion}.  Let $T = (T_1, T_2, \hdots, T_N \}$ be the sequence of points of the target curve to hide, where each $T_i \in \mathbb{R}^d$, and let $T_{i, m}$ refer to $m^{\text{th}}$ coordinate of $T_i$, and let $x$ be a set of audio samples which will serve as a carrier.  The goal is to perturb the samples of $x$ so that some function of $x$ matches $T$ as closely as possible.  The function we choose is based on a ``time regularized'' version of the magnitude Short-Time Fourier Transform (STFT) which we call a {\em sliding window sum} STFT (SWS-STFT).  As a first step, we compute a {\em non-overlapping} STFT $S$ based on a chosen window length $w$ with a total of $N$ frames:
 
@@ -344,9 +357,10 @@ In practice, we re-run the algorithm starting at $K = 1$, and we repeatedly incr
 \subsection{Storing Component Scales in Phase}
 \label{sec:componentscales}
 
-We use the technique presented by the authors of \cite{xiaoxiao_dong_data_2004} to recover the scales of each component.
+Since we intentionally rescale the dimensions of the target to match the dynamic range of each SW-STFT component, we lose the aspect ratio between the dimensions.  But since we have only perturbed the magnitude components of the frequency indices $k_i$, we still have some freedom to perturb the phases to store additional information.  To that end, we use the technique presented by the authors of \cite{xiaoxiao_dong_data_2004} to store the relative scale of each dimension.  
 
 \subsection{Recovering Frame Alignments}
+\label{sec:framealignments}
 
 \begin{figure}
   \centering
