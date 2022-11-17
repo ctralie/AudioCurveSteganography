@@ -55,14 +55,14 @@
 \section{Introduction / Background}
 
 
-Steganography is the process of hiding one data stream ``in plain sight'' within another data stream known as a ``carrier.''  In this work, we are interested in using audio as a carrier to store images, which has been relatively unexplored in the academic literature (Section~\ref{sec:priorwork}).  As with any stegonographic technique, people can use this as a general means of covert communication, but it can also be used for artists to hide images and to watermark their tunes.  One such example occurred when Aphex Twin embedded a face image inside the spectrogram of their ``Windowlicker'' song \cite{mathews2004music}, though the technique yields very loud, inharmonic, scratchy sounds.  By contrast, we seek an embedding of the image that is undetectable.  Like Aphex Twin, however, we would like the image to survive lossy audio compression so that people can communicate their images via social media, which makes the problem significantly more challenging.
+Steganography is the process of hiding one data stream ``in plain sight'' within another data stream known as a ``carrier.''  In this work, we are interested in using audio as a carrier to store images, which has been relatively unexplored in the academic literature (Section~\ref{sec:priorwork}).  As with any stegonographic technique, people can use this as a general means of covert communication, but it can also be used for artists to hide images and to watermark their tunes.  One such example occurred when Aphex Twin embedded a face image inside the spectrogram of their ``Windowlicker'' song \cite{mathews2004music}, though the technique yields very loud, inharmonic, scratchy sounds.  By contrast, we seek an embedding of the image that is undetectable.  Like Aphex Twin, however, {\em we would like the image to survive lossy audio compression} so that people can communicate their images via social media, which makes the problem significantly more challenging.
 
 To make our audio steganography system as robust and usable as possible, we have the following design goals:
 \begin{enumerate}
     \item \label{goal:imperceptible} The hidden data should be audibly imperceptible
     \item \label{goal:geomquality} The hidden data should be faithfully preserved {\em under lossy compression}
     \item \label{goal:misalignment} The hidden data should be robust to frame misalignment, or it should be possible to recover a frame alignment without any prior information
-    \item \label{goal:metadata} No metadata should be required to retrieve the hidden data; (compressed) audio alone should suffice
+    \item \label{goal:metadata} No metadata should be required to retrieve the hidden data; (lossily compressed) audio alone should suffice
     \item \label{goal:partial} It should be possible to recover the data partially from partial audio chunks; that is, we don't need to wait for the entire data stream to recover the signal
 \end{enumerate}
 
@@ -78,19 +78,13 @@ Before we proceed to describing the techniques for constructing artistic curves 
 
 As for most other steganographic carriers, the simplest techniques for audio steganography rely on changing the least significant bit of uncompressed encodings (e.g. \cite{cvejic_wavelet_2002}).  Other early works rely on the ``frequency masking'' property of the human auditory system.  Binary data is stored by controlling the relative amplitude of two frequencies that are masked in this way \cite{gopalan_unified_2009, gopalan2004audio}.
 
-Beyond amplitude perturbations, it is also possible to keep the amplitudes fixed and to change the phases \cite{xiaoxiao_dong_data_2004, hwan_sik_yun_acoustic_2010}; the technique of \cite{malik_robust_2007} was particularly successful at this by manipulating the poles of allpass filters to encode binary data.  One can also hide binary data by adding and manipulating echoes of a signal \cite{gruhl1996echo}, which is more robust than other techniques to lossy compression since it is akin to impulse responses of natural environments; however, the bit rate is quite low (on the order of dozens of bits per second).  For another approach to compressed audio, some techniques are able to use the properties of mp3 files directly to hide information \cite{qiao_steganalysis_2009,atoum2013exploring}.  Other techniques adapt wireless transmissions schemes, such as and on-off keying (OOK) \cite{madhavapeddy_audio_2005} (at a low bit rate of 8bps) and orthogonal frequency-division multiplexing (OFDM) \cite{eichelberger_receiving_2019} (at a higher bit rate of closer to 1kbps), to the audio domain.
+Beyond amplitude perturbations, it is also possible to keep the amplitudes fixed and to change the phases \cite{xiaoxiao_dong_data_2004, yun2009acoustic}; the technique of \cite{malik_robust_2007} was particularly successful at this by manipulating the poles of allpass filters to encode binary data.  One can also hide binary data by adding and manipulating echoes of a signal \cite{gruhl1996echo}, which is more robust than other techniques to lossy compression since it is akin to impulse responses of natural environments; however, the bit rate is quite low (on the order of dozens of bits per second).  For another approach to compressed audio, some techniques are able to use the properties of mp3 files directly to hide information \cite{qiao_steganalysis_2009,atoum2013exploring}.  Other techniques adapt wireless transmissions schemes, such as and on-off keying (OOK) \cite{madhavapeddy_audio_2005} (at a low bit rate of 8bps) and orthogonal frequency-division multiplexing (OFDM) \cite{eichelberger_receiving_2019} (at a higher bit rate of closer to 1kbps), to the audio domain.
 
-Most of the hidden messages in the audio steganography literature are in binary format, but a few recent works have focused on hiding images pixels using deep learning to train networks to a ``hiding network'' and a ``reveal network'' to work in tandem ot encode an image in an audio stream and then to decode its addition into the carrier, respectively, while maximizing quality of the decoded image and the encoded audio \cite{cui_multi-stage_2021, geleta_pixinwav_2021, takahashi_source_2022, domenech2022hiding}.  Not only do we also attempt to hide images, but we have a similar perspective that rather than attempting to extract binary sequences exactly, we can tolerate progressive noise in the reconstructions.  Challenges of deep-learning based approaches include the need to extensively train on examples, the difficulty of including a loss term that can model the effect of lossy audio compression, and the difficulty of training to be robust to frame misalignment (Goal~\ref{goal:misalignment}).  We sidestep these challenges in our work by using a simple model based on hiding in frequencies.
+Most of the hidden messages in the audio steganography literature are in binary format, but a few recent works have focused on hiding images pixels using deep learning to train a ``hiding network'' and a ``reveal network'' in tandem to encode an image in an audio stream and then to decode its addition into the carrier, respectively, while maximizing quality of the decoded image and the encoded audio \cite{cui_multi-stage_2021, geleta_pixinwav_2021, takahashi_source_2022, domenech2022hiding}.  Not only do we also attempt to hide images, but we have a similar perspective that rather than attempting to extract binary sequences exactly, we can tolerate progressive noise in the reconstructions.  Challenges of deep-learning based approaches include the need to extensively train on examples, the difficulty of including a loss term that can model the effect of lossy audio compression, and the difficulty of training to be robust to frame misalignment (Goal~\ref{goal:misalignment}).  We sidestep these challenges in our work by using a simple model based on hiding in frequencies.
 
 \subsection{Traveling Salesperson Art}
 \label{sec:tspart}
 
-\begin{figure}
-  \centering
-  \includegraphics[width=\columnwidth]{TSPTour.pdf}
-  \caption{Our modified pipeline for creating TSP art.  Color on the tour indicates phase along the loop.}
-  \label{fig:TSPTour}
-\end{figure}
 
 To devise 2D curves that stand in for images, we use Traveling Salesperson (TSP) art \cite{bosch2004continuous, kaplan2005tsp,bosch2008connecting}, which is an automated artistic line drawing pipeline which computes a {\em simple closed loop} to approximate a source image.  ``Simple'' in this context does not imply a lack of complexity; rather, it means that a curve does not intersect itself (see, for example, the Jordan Curve Theorem \cite{bosch2009jordan}).  To construct such a curve, we first place a collection of dots in the plane in a ``stipple pattern'' to approximate brightness in the image (e.g. more dots concentrate in darker regions), and then connect them in a loop via an approximate traveling salesperson (TSP) tour.  Figure~\ref{fig:TSPTour} shows an example.  We follow the TSP Art technique of \cite{kaplan2005tsp}, with a few modifications, as described below.
 
@@ -133,9 +127,28 @@ To devise 2D curves that stand in for images, we use Traveling Salesperson (TSP)
 %  \label{alg:twoopt}
 %\end{algorithm}
 
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\columnwidth]{TSPTour.pdf}
+  \caption{Our modified pipeline for creating TSP art.  Color on the tour indicates phase along the loop.}
+  \label{fig:TSPTour}
+\end{figure}
+
+\begin{figure}
+  \begin{minipage}[c]{0.4\textwidth}
+    \caption{
+      Since mp3 compression introduces noise to our embedded curves, we pre-smooth them using one iteration of curvature-shortening flow at $\sigma=1$, which smooths the curves without introducing any crossings.
+    } \label{fig:CurvatureShortening}
+  \end{minipage}
+  \begin{minipage}[c]{0.6\textwidth}
+    \includegraphics[width=\columnwidth]{CurvatureShortening.png}
+  \end{minipage}\hfill
+\end{figure}
+
 The first step in TSP art is to generate a stipple pattern $X$ to best approximate a grayscale image $G$.  Following the authors of \cite{kaplan2005tsp}, we use Secord's technique for Voronoi stippling \cite{secord2002weighted}, which takes an initial sample of points according to some density weights $W$ and then repeatedly moves them closer the weighted centroid of their Voronoi regions (an instance of Lloyd's algorithm) so that they are spread more evenly.  Secord \cite{secord2002weighted} takes the weight $W_{ij}$ at a pixel to be inversely proportional to its brightness, using a weight of $0$ above some brigtness threshold $b$.  This leads more dots to concentrate in darker regions; however, the algorithm may fail to sample any dots along important edges between brighter regions (the authors of \cite{li2011structure} also observed this).  To mitigate this, we run a Canny edge detector \cite{canny1986computational} on the original image and set the weight of any pixels along an edge to be 1, so that the final weights promote samples both in darker regions and along edges of any kind.  This addition is particularly helpful for line drawings.  %Algorithm~\ref{alg:voronoistipple} provides more details.
 
-Once a stipple has been established, the next step in TSP art is to ``connect the dots'' with a closed loop that visits each stipple point exactly once, referred to as a ``tour''\footnote{A loop with these properties is otherwise known as a {\em Hamiltonian cycle} on a complete graph over the points}.  A well known objective function for a tour that doesn't ``jump too much'' is the total distance traveled, or the sum of all edge lengths, and a tour that achieves the optimum is known as a {\em traveling salesperson (TSP) tour}.  Since the TSP problem is NP-hard, the authors of  \cite{kaplan2005tsp} use the Concorde TSP solver \cite{applegate2001concorde} for an approximate solution. We opt for a simpler technique that first creates a 2-approximation of a TSP from a depth-first traversal through the minimum spanning tree of the stipple dots, which is a already a 2-approximation of the optimal tour.  We then iteratively improve on this tour via a sequence of 2-opt relaxations \cite{johnson1997traveling}; that is, if for some $i > 1, i < j < N$ the distances between the 4 points $X_i, X_{i+1}, X_j$, and $X_{j+1}$ satisfy
+Once a stipple has been established, the next step in TSP art is to ``connect the dots'' with a closed loop that visits each stipple point exactly once, referred to as a ``tour''.  A well known objective function for a tour that doesn't ``jump too much'' is the total distance traveled, or the sum of all edge lengths, and a tour that achieves the optimum is known as a {\em traveling salesperson (TSP) tour}.  Since the TSP problem is NP-hard, the authors of  \cite{kaplan2005tsp} use the Concorde TSP solver \cite{applegate2001concorde} for an approximate solution. We opt for a simpler technique that first creates a 2-approximation of a TSP from a depth-first traversal through the minimum spanning tree of the stipple dots, which is a already a 2-approximation of the optimal tour.  We then iteratively improve on this tour via a sequence of 2-opt relaxations \cite{johnson1997traveling}; that is, if for some $i > 1, i < j < N$ the distances between the 4 points $X_i, X_{i+1}, X_j$, and $X_{j+1}$ satisfy
 
 
 % \begin{figure}
@@ -159,18 +172,6 @@ then it is possible to perform a swap to yield a new tour with a smaller distanc
 
 \subsubsection{Curvature Shortening Flow}
 
-\begin{figure}
-  \begin{minipage}[c]{0.4\textwidth}
-    \caption{
-      Anticipating that mp3 compression will introduce noise to our embedded curves, we pre-smooth them before hiding them using one iteration of curvature-shortening flow at $\sigma=1$, which smooths the curves without introducing any crossings.
-    } \label{fig:CurvatureShortening}
-  \end{minipage}
-  \begin{minipage}[c]{0.6\textwidth}
-    \includegraphics[width=\columnwidth]{CurvatureShortening.png}
-  \end{minipage}\hfill
-  
-\end{figure}
-
 % In particular, let 
 % \begin{equation}
 %   g_{\sigma}[j] = c_1 e^{-j^2 / (2 \sigma^2)}, 
@@ -190,17 +191,17 @@ To approximately smooth a curve via one step of curvature-shortening flow, Mokht
 
 
 
-\subsection{Hamiltonian Paths on Watertight Triangle Meshes}
+\subsection{Hamiltonian Cycles on Watertight Triangle Meshes}
 \label{sec:hamiltonian}
 
 \begin{figure}
   \centering
-  \includegraphics[width=\columnwidth]{HamiltonianHorse.pdf}
+  \includegraphics[width=0.8\columnwidth]{HamiltonianHorse.pdf}
   \caption{An example of the algorithm of Gopi and Epstein \cite{gopi2004single} on a horse model from the Princeton mesh segmentation benchmark \cite{Chen:2009:ABF}.}
   \label{fig:HamiltonianHorse}
 \end{figure}
 
-In addition to 2D TSP tours on stipple patterns on planar images, we also create artistic 3D space curves that fill out the surfaces of 3D shapes following the technique of Gopi and Epstein \cite{gopi2004single}.  They observe that watertight triangle meshes (those with no boundary) have a dual graph in which a perfect matching exists.  In other words, it is possible to partition the triangles into a set of adjacent pairs (second column of Figure~\ref{fig:HamiltonianHorse}).  In practice, we use the Blossom-5 algorithm \cite{kolmogorov2009blossom} to find perfect matches of the dual graph.  Then, adding edges between unpaired triangles leads to a set of disconnected cycles (third column of Figure~\ref{fig:HamiltonianHorse}), which are connected by a spanning set of edges between paired triangles.  Finally, the spanning edges are split into bridges between the disconnected cycles, joining them together into one large cycle that covers the surface of the triangle mesh.
+In addition to 2D TSP tours on stipple patterns on planar images, we also create artistic 3D space loops that fill out the surfaces of 3D shapes following the technique of Gopi and Epstein \cite{gopi2004single}.  They observe that watertight triangle meshes (those with no boundary) have a dual graph in which a perfect matching exists.  In other words, it is possible to partition the triangles into a set of adjacent pairs (second column of Figure~\ref{fig:HamiltonianHorse}).  In practice, we use the Blossom-5 algorithm \cite{kolmogorov2009blossom} to find perfect matches of the dual graph.  Then, adding edges between unpaired triangles leads to a set of disconnected cycles (third column of Figure~\ref{fig:HamiltonianHorse}), which are connected by a spanning set of edges between paired triangles.  Finally, the spanning edges are split into bridges between the disconnected cycles, joining them together into one large cycle that covers the surface of the triangle mesh.
 
 
 \section{Curve Embedding in Audio}
@@ -213,7 +214,11 @@ We now introduce our new algorithm for hiding artistic space curves in audio.  B
    \text{snr}(y|x) = 10  \log_{10} \left(\sum_{j=1}^N x_j^2 \right) -  10 \log_{10}\left(\sum_{j=1}^N (y_j-x_j)^2  \right)
 \end{equation}
 
-For our geometric measurement of quality, let $X_i$ be a sequence of $M$ target curve points in $\mathbb{R}^d$ and $Y_i$ be a sequence of $M$ reconstructed points in $\mathbb{R}^d$.  Then we define the {\em mean geometric distortion} is simply as the mean Euclidean distance between these points: $\text{distortion}(Y|X) = \frac{1}{M} \sum_{j=1}^M ||X_j - Y_j||_2$.
+For our geometric measurement of quality, let $X_i$ be a sequence of $M$ target curve points in $\mathbb{R}^d$ and $Y_i$ be a sequence of $M$ reconstructed points in $\mathbb{R}^d$.  Then we define the {\em mean geometric distortion} is simply as the mean Euclidean distance between these points:
+\begin{equation}
+  \label{eq:distortion}
+  \text{distortion}(Y|X) = \frac{1}{M} \sum_{j=1}^M ||X_j - Y_j||_2
+\end{equation}
 
 
 \subsection{Formulation of Least Squares Problem}
@@ -242,14 +247,14 @@ The effect of $\ell$ is to smooth out the noisy rows $k_i$ of the magnitude spec
 
 \begin{figure}
   \centering
-  \includegraphics[width=0.8\columnwidth]{WindowEffect.pdf}
+  \includegraphics[width=0.9\columnwidth]{WindowEffect.pdf}
   \caption{Varying $\ell$ for a fixed $\lambda=0.1$, using the lowest two non-DC frequencies to carry.  A larger $\ell$ for the SW-STFT in Equation~\ref{eq:objfn} leads to smoother curves which are more likely to survive compression, but an $\ell$ that's too large may over-smooth.}
   \label{fig:WindowEffect}
 \end{figure}
 
 \begin{figure}
   \centering
-  \includegraphics[width=0.8\columnwidth]{LambdaEffect.pdf}
+  \includegraphics[width=0.9\columnwidth]{LambdaEffect.pdf}
   \caption{Varying $\lambda$ for a fixed $\ell=16$.  A smaller $\lambda$ in Equation~\ref{eq:objfn} leads to higher geometric fidelity (Goal~\ref{goal:geomquality}), at the cost of audio quality (Goal~\ref{goal:imperceptible}), as measured by SNR.}
   \label{fig:LambdaEffect}
 \end{figure}
@@ -332,7 +337,7 @@ Beyond shifting and scaling the targets coordinates vertically, we may also need
   g(\Theta = \{\theta_1, \theta_2, \hdots, \theta_{N_M}\}) = \sum_{j = 1}^{N_M} \sum_{i=1}^d \left( \text{SWS}^{\ell} (M)_{k_i, j} - \hat{T}_{i, j}  \right)^2
 \end{equation}
 
-For a fixed $K$, we use the Viterbi algorithm to obtain a $\Theta$ minimizing Equation~\ref{eq:viterbiobj} in $O(MNK)$ time.  Our use of the Viterbi algorithm for re-parameterizing geometric sequences is similar to the technique for corpus-based concatenative synthesis presented by the authors of \cite{schwarz2007corpus}.  Algorithm~\ref{alg:viterbiwarp} gives more details.  
+For a fixed $K$, we use the Viterbi algorithm to obtain a $\Theta$ minimizing Equation~\ref{eq:viterbiobj} in $O(MNK)$ time.  Algorithm~\ref{alg:viterbiwarp} gives more details.  
 
 \begin{figure}
   \centering
@@ -352,47 +357,42 @@ In practice, we re-run the algorithm starting at $K = 1$, and we repeatedly incr
 \subsection{Storing Component Scales in Phase}
 \label{sec:componentscales}
 
-Since we intentionally rescale the dimensions of the target to match the dynamic range of each SW-STFT component, we lose the aspect ratio between the dimensions.  But since we have only perturbed the magnitude components of the frequency indices $k_i$, we still have some freedom to perturb the phases to store additional information.  To that end, we use the technique presented by the authors of \cite{xiaoxiao_dong_data_2004} to store the relative scale of each dimension.  
+Since we intentionally rescale the dimensions of the target to match the dynamic range of each SW-STFT component, we lose the aspect ratio between the dimensions.  But since we have only perturbed the magnitude components of the frequency indices $k_i$, we still have some freedom to perturb the phases to store additional information.  To that end, we use the technique presented by the authors of \cite{xiaoxiao_dong_data_2004} to store the relative scale of each dimension in the phase.  We store the same scale in the phase of every STFT frame, and we take the median scales upon decoding.
 
 \subsection{Recovering Frame Alignments}
 \label{sec:framealignments}
 
+What we've described so far works for audio that is aligned to each window, but additional work needs to be done to address Goal ~\ref{goal:misalignment} if the audio to decode comes in misaligned.  To this end, we use the fact that the hidden curves move only slightly between adjacent samples; a TSP tour is defined as length-minimizing, and adjacent samples in Hamiltonian cycles on meshes move only between neighboring triangles on the original mesh.  If the embedding is frame aligned, the length of the curve should be minimized.  Conversely, if the embedding is not frame aligned, the curve becomes noisy and is more likely to jump around quickly from sample to sample.  Therefore, we can pick the alignment which minimizes the length in all possible shifts from $0$ to the STFT window length.  Figure~\ref{fig:FrameAlignments} shows an example.  We will empirically evaluate this in Section~\ref{sec:experiments}.
+
+
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{OptimalShift.pdf}
-  \caption{A shift which minimizes curve length is most likely the shift needed to re-align audio to frame windows.  The dot here indicates the ground truth shift of an embedding using the lowest two non-DC frequencies with $\lambda=0.1, \ell=16$, and the global mins exactly match ground truth.}
+  \caption{A shift which minimizes curve length is most likely the shift needed to re-align audio to frame windows.  In this example with the embedding using the lowest two non-DC frequencies with $\lambda=0.1, \ell=16$, the global mins exactly match ground truth.}
   \label{fig:FrameAlignments}
 \end{figure}
-
-What we've described so far works for audio that is aligned to each window, but additional work needs to be done to address Goal ~\ref{goal:misalignment} if the audio to decode comes in misaligned.  To this end, we use the fact that the hidden curves move only slightly between adjacent samples; a TSP tour is defined as length-minimizing, and adjacent samples in Hamiltonian cycles on meshes move only between neighboring triangles on the original mesh.  If the embedding is frame aligned, the length of the curve should be minimized.  Conversely, if the embedding is not frame aligned, the curve becomes noisy and is more likely to jump around quickly from sample to sample.  Therefore, we can pick the alignment which minimizes the length in all possible shifts from $0$ to $win$.  Figure~\ref{fig:FrameAlignments} shows an example.  We will empirically evaluate this in Section~\ref{sec:experiments}.
-
-
-
 
 
 \section{Experiments}
 \label{sec:experiments}
 
-Below we assess the performance of our system on an extensive set of tests
 
-Show caltech-101 and meshseg examples
 
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{caltech101_samples.png}
-  \caption{Examples of some TSP art on the Caltech-101 dataset \cite{li_andreeto_ranzato_perona_2022}.}
+  \caption{Examples of TSP art on the Caltech-101 dataset \cite{li_andreeto_ranzato_perona_2022}.}
   \label{fig:caltech101examples}
 \end{figure}
 
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{MeshSegExamples.png}
-  \caption{Examples of some Hamiltonian cycles on triangle meshes from the Princeton mesh segmentation benchmark \cite{Chen:2009:ABF}.}
+  \caption{Examples of Hamiltonian cycles on triangle meshes from the Princeton mesh segmentation benchmark \cite{Chen:2009:ABF}.}
   \label{fig:meshsegexamples}
 \end{figure}
 
-\subsection{Quantitative Results}
-
+We now quantitatively assess the performance of our system.  To generate a large set of curves, we generate TSP art on the roughly 10,000 images in the Caltech-101 dataset  \cite{li_andreeto_ranzato_perona_2022} (e.g. Figure~\ref{fig:caltech101examples}), and we generate Hamiltonian cycles on the 380 watertight triangle meshes in the Princeton mesh segmentation database \cite{Chen:2009:ABF} (e.g. Figure~\ref{fig:meshsegexamples}).  We then use the 1000 30 second audio clips from the Tzanetakis genre dataset \cite{tzanetakis2002musical} as carrier audio.  For the Caltech-101 database, we partition the images into sets of 10, which are each encoded in one of the audio carriers varying $\lambda$ and $\ell$.  Likewise, for the mesh segmentation dataset, we hide each Hamiltonian path in three different audio clips from the Tzanetakis dataset.  In all cases, we encode the audio using lossy mp3 compression at 64 kbps.
 
 \begin{figure}
   \centering
@@ -418,27 +418,32 @@ Show caltech-101 and meshseg examples
   \label{fig:ResultsViterbiExperiment}
 \end{figure}
 
-As Figure~\ref{fig:ResultsFixedLam} shows, increasing the window length has a positive effect on geometric distortion, while moderate window lengths lead to the best SNR.
+As Figure~\ref{fig:ResultsFixedLam} shows, increasing the window length has a positive effect on geometric distortion, while moderate window lengths lead to the best SNR.  Also, as expected, increasing $\lambda$ increases the SNR while leading to higher distortion, as shown in Figure~\ref{fig:ResultsFixedWin}.  We also see a positive effect of the Viterbi alignment from Section~\ref{sec:reparam} on the SNR in Figure~\ref{fig:ResultsViterbiExperiment}.  Finally, we run an experiment on the Caltech-101 dataset by choosing 4 random frame offsets per embedding, and we see in Figure~\ref{fig:ShiftsExperiment} that the algorithm of Section~\ref{sec:framealignments} recovers alignments well.
 
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{ShiftsExperiment.pdf}
-  \caption{}
+  \caption{Estimating the frame alignment by minimizing the length (Section~\ref{sec:framealignments}) works nearly as well as perfect knowledge of the alignment. 93\% of the shifts are within 10 of the ground truth for an STFT window length of 1024, which has hardly any effect on the geometry of the curve.}
   \label{fig:ShiftsExperiment}
 \end{figure}
 
 
-\subsection{Subjective Listening Experiment}
+\subsubsection{Subjective Listening Experiment}
 
 \begin{figure}
-  \centering
-  \includegraphics[width=0.8\columnwidth]{Turk.pdf}
-  \caption{Results of the listening experiment on the Amazon Mechanical Turk.  A lower $\lambda$ leads to a lower mean opinion score, as expected, though not to an intolerable degree.}
-  \label{fig:TurkResults}
+  \begin{minipage}[c]{0.36\textwidth}
+    \caption{
+      Results of the listening experiment on the Amazon Mechanical Turk.  A lower $\lambda$ leads to a lower mean opinion score, as expected, though not to an intolerable degree.
+    } \label{fig:TurkResults}
+  \end{minipage}
+  \begin{minipage}[c]{0.64\textwidth}
+    \includegraphics[width=\columnwidth]{Turk.pdf}
+  \end{minipage}\hfill
+  
 \end{figure}
 
 
-We can actually get higher SNRs using frequencies that are more audible
+Though the experiments above are encouraging, SNR can be misleading; frequencies that are more audible may actually have a higher SNR.
 
 We ask questions similar to the authors of \cite{bassia2001robust}.
 
@@ -448,8 +453,7 @@ Figure~\ref{fig:TurkResults} shows the results.  Mean opinion scores are correla
 
 \section{Discussion}
 
-
-Talk about how this scheme works for any orthogonal decomposition of the signal and how we tried wavelets
+We have presented a model-based scheme for hiding artistic curves in audio, and the curves survive lossy compression.  Talk about how this scheme works for any orthogonal decomposition of the signal and how we tried wavelets
 
 %
 % ---- Bibliography ----
