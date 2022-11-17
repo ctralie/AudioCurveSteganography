@@ -357,7 +357,7 @@ In practice, we re-run the algorithm starting at $K = 1$, and we repeatedly incr
 \subsection{Storing Component Scales in Phase}
 \label{sec:componentscales}
 
-Since we intentionally rescale the dimensions of the target to match the dynamic range of each SW-STFT component, we lose the aspect ratio between the dimensions.  But since we have only perturbed the magnitude components of the frequency indices $k_i$, we still have some freedom to perturb the phases to store additional information.  To that end, we use the technique presented by the authors of \cite{xiaoxiao_dong_data_2004} to store the relative scale of each dimension in the phase.  We store the same scale in the phase of every STFT frame, and we take the median scales upon decoding.
+Since we intentionally rescale the dimensions of the target to match the dynamic range of each SW-STFT component, we lose the aspect ratio between the dimensions.  But since we have only perturbed the magnitude components of the frequency indices $k_i$, we still have some freedom to perturb the phases to store additional information.  To that end, we use the technique presented by the authors of \cite{xiaoxiao_dong_data_2004} to store the relative scale of each dimension in the phase.  We store the same scale in the phase of every STFT frame, and we take the scale to be the median of the phases upon decoding.
 
 \subsection{Recovering Frame Alignments}
 \label{sec:framealignments}
@@ -394,13 +394,7 @@ What we've described so far works for audio that is aligned to each window, but 
 
 We now quantitatively assess the performance of our system.  To generate a large set of curves, we generate TSP art on the roughly 10,000 images in the Caltech-101 dataset  \cite{li_andreeto_ranzato_perona_2022} (e.g. Figure~\ref{fig:caltech101examples}), and we generate Hamiltonian cycles on the 380 watertight triangle meshes in the Princeton mesh segmentation database \cite{Chen:2009:ABF} (e.g. Figure~\ref{fig:meshsegexamples}).  We then use the 1000 30 second audio clips from the Tzanetakis genre dataset \cite{tzanetakis2002musical} as carrier audio.  For the Caltech-101 database, we partition the images into sets of 10, which are each encoded in one of the audio carriers varying $\lambda$ and $\ell$.  Likewise, for the mesh segmentation dataset, we hide each Hamiltonian path in three different audio clips from the Tzanetakis dataset.  In all cases, we encode the audio using lossy mp3 compression at 64 kbps.
 
-\begin{figure}
-  \centering
-  \includegraphics[width=\columnwidth]{CaltechGTzanFixedLam.pdf}
-  \includegraphics[width=\columnwidth]{MeshSegGTzanFixedLam.pdf}
-  \caption{The results embedding curves into clips from the Tzanetakis genre dataset varying the window length $\ell$ for a fixed $\lambda$.  Moderate window lengths are the best choices for both SNR and distortion.  We recommend $\ell=16$.}
-  \label{fig:ResultsFixedLam}
-\end{figure}
+
 
 \begin{figure}
   \centering
@@ -412,23 +406,38 @@ We now quantitatively assess the performance of our system.  To generate a large
 
 \begin{figure}
   \centering
+  \includegraphics[width=\columnwidth]{CaltechGTzanFixedLam.pdf}
+  %\includegraphics[width=0.9\columnwidth]{MeshSegGTzanFixedLam.pdf}
+  \caption{Embedding curves into clips from the Tzanetakis genre dataset varying the window length $\ell$ for a fixed $\lambda$.  Moderate window lengths are the best choices for both SNR and distortion.  We recommend $\ell=16$. (3D is similar; see supplementary)}
+  \label{fig:ResultsFixedLam}
+\end{figure}
+
+Overall, we see slightly higher distortions and lower SNRs for 3D embeddings than 2D embeddings, which makes sense since there is one additional coordinate to hide.  As expected, increasing $\lambda$ increases both the SNR and distortion, as shown in Figure~\ref{fig:ResultsFixedWin}. Also, as Figure~\ref{fig:ResultsFixedLam} shows, increasing the window length has a positive effect on geometric distortion, while moderate window lengths lead to the best SNR.  We also see a positive effect of the Viterbi alignment from Section~\ref{sec:reparam} on the SNR in Figure~\ref{fig:ResultsViterbiExperiment}.  Finally, we run an experiment on the Caltech-101 dataset by choosing 4 random frame offsets per embedding, and we see in Figure~\ref{fig:ShiftsExperiment} that the algorithm of Section~\ref{sec:framealignments} recovers alignments well.  
+
+
+\begin{figure}
+  \centering
   \includegraphics[width=\columnwidth]{CaltechGTzanViterbiExperiment.pdf}
   \includegraphics[width=\columnwidth]{MeshSegGtzanViterbiExperiment.pdf}
   \caption{Pre-warping the target with Viterbi alignment (Section~\ref{sec:reparam}) overall improves the resulting distortion and SNR.}
   \label{fig:ResultsViterbiExperiment}
 \end{figure}
 
-As Figure~\ref{fig:ResultsFixedLam} shows, increasing the window length has a positive effect on geometric distortion, while moderate window lengths lead to the best SNR.  Also, as expected, increasing $\lambda$ increases the SNR while leading to higher distortion, as shown in Figure~\ref{fig:ResultsFixedWin}.  We also see a positive effect of the Viterbi alignment from Section~\ref{sec:reparam} on the SNR in Figure~\ref{fig:ResultsViterbiExperiment}.  Finally, we run an experiment on the Caltech-101 dataset by choosing 4 random frame offsets per embedding, and we see in Figure~\ref{fig:ShiftsExperiment} that the algorithm of Section~\ref{sec:framealignments} recovers alignments well.
-
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{ShiftsExperiment.pdf}
-  \caption{Estimating the frame alignment by minimizing the length (Section~\ref{sec:framealignments}) works nearly as well as perfect knowledge of the alignment. 93\% of the shifts are within 10 of the ground truth for an STFT window length of 1024, which has hardly any effect on the geometry of the curve.}
+  \caption{Estimating the frame alignment by minimizing the length (Section~\ref{sec:framealignments}) works nearly as well as perfect knowledge of the alignment. Using $\lambda=0.1, \ell=10$ over all images in Caltech-101, 93\% of the shifts are within 10 of the ground truth for an STFT window length of 1024, which has hardly any effect on the geometry of the curve.}
   \label{fig:ShiftsExperiment}
 \end{figure}
 
-
 \subsubsection{Subjective Listening Experiment}
+
+
+Though the experiments above are encouraging, SNR can be misleading; frequencies that are more audible may actually have a higher SNR.  To address this, we performed a crowd-sourced listening experiment on the Amazon Mechanical Turk where we embedded a random image from the Caltech-101 dataset in each of the Tzanetakis clips.  We split them into 4 groups with no embedding (control), and with $\lambda = 0.1, 1, 10$, and we asked the listeners to rate the quality of the noise on the 5 point impairment scale of \cite{bassia2001robust} (5: imperceptible, 4: perceptible but not annoying, 3: slightly annoying, 2: annoying, 1: very annoying).  In our experiment, we had 46 unique Turkers, 21 of whom participated in at least 40 rankings.  Figure~\ref{fig:TurkResults} shows the results.  Mean opinion scores (MOS) are correlated with $\lambda$, but there's not much of a difference between $\lambda=0.1$ and $\lambda=1$, which suggests using the former as a rule of thumb due to its lower geometric distortion.
+% We see a Pearson correlation of $r=0.48$ between the mean opinion score and the SNR in dB.  
+
+
+
 
 \begin{figure}
   \begin{minipage}[c]{0.36\textwidth}
@@ -442,18 +451,11 @@ As Figure~\ref{fig:ResultsFixedLam} shows, increasing the window length has a po
   
 \end{figure}
 
+\section{Discussion / Conclusion}
 
-Though the experiments above are encouraging, SNR can be misleading; frequencies that are more audible may actually have a higher SNR.
+We have presented a model-based scheme for hiding artistic curves in audio, and the curves survive lossy compression while remaining reasonably imperceptible, as validated both with quantitative measurements and by humans.  We hide the dimensions of curves in time regularized magnitudes of STFT frequencies, though coefficients of any orthogonal decomposition could work (we also implemented wavelets, though we found them more audibly perceptible).  Our scheme is incredibly simple and requires no training.  Decoding is nearly instantaneous, as it only requires computing the STFT of a few frequencies.  
 
-We ask questions similar to the authors of \cite{bassia2001robust}.
 
-46 unique Turkers, 21 of whom participated in at least 40 rankings.
-
-Figure~\ref{fig:TurkResults} shows the results.  Mean opinion scores are correlated with $\lambda$, but there's not much of a difference between $\lambda=0.1$ and $\lambda=1$, which suggests using the former as a rule of thumb due to its lower geometric distortion.
-
-\section{Discussion}
-
-We have presented a model-based scheme for hiding artistic curves in audio, and the curves survive lossy compression.  Talk about how this scheme works for any orthogonal decomposition of the signal and how we tried wavelets
 
 %
 % ---- Bibliography ----
