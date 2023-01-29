@@ -28,20 +28,20 @@
 % If the paper title is too long for the running head, you can set
 % an abbreviated paper title here
 %
-\author{First Author\inst{1}\orcidID{0000-1111-2222-3333}}
+\author{Christopher J Tralie\inst{1}\orcidID{0000-0003-4206-1963}}
 %
-\authorrunning{F. Author et al.}
+\authorrunning{C. Tralie}
 % First names are abbreviated in the running head.
 % If there are more than two authors, 'et al.' is used.
 %
-\institute{Princeton University, Princeton NJ 08544, USA 
-\email{lncs@springer.com}}
+\institute{Ursinus College, Collegeville PA 19426, USA 
+\email{ctralie@alumni.princeton.edu}}
 %
 \maketitle              % typeset the header of the contribution
 %
 \begin{abstract}
 
-  In this work, we create artistic closed loop curves that trace out images and 3D shapes, which we then hide in musical audio as a form of steganography.  We use traveling salesperson art to create artistic plane loops to trace out image contours, and we use Hamiltonian cycles on triangle meshes to create artistic space loops that fill out 3D surfaces. Our embedding scheme is designed to faithfully preserve the geometry of these loops after lossy compression, while keeping their presence undetectable to the audio listener. To accomplish this, we hide each dimension of the curve in a different frequency, and we perturb a regularized version of the magnitude of that frequency to best match the target curve at that dimension, while hiding scale information in that frequency's phase.  In the process, we exploit geometric properties of the curves to help to more effectively hide and recover them.  Our scheme is simple and encoding happens efficiently with a nonnegative least squares framework, while decoding is trivial.  We validate our technique quantitatively on large datasets of images and audio, and we show results of a crowd sourced listening test that validate that the hidden information is indeed unobtrusive.
+  In this work, we create artistic closed loop curves that trace out images and 3D shapes, which we then hide in musical audio as a form of steganography.  We use traveling salesperson art to create artistic plane loops to trace out image contours, and we use Hamiltonian cycles on triangle meshes to create artistic space loops that fill out 3D surfaces. Our embedding scheme is designed to faithfully preserve the geometry of these loops after lossy compression, while keeping their presence undetectable to the audio listener. To accomplish this, we hide each dimension of the curve in a different frequency, and we perturb a sliding window sum of the magnitude of that frequency to best match the target curve at that dimension, while hiding scale information in that frequency's phase.  In the process, we exploit geometric properties of the curves to help to more effectively hide and recover them.  Our scheme is simple and encoding happens efficiently with a nonnegative least squares framework, while decoding is trivial.  We validate our technique quantitatively on large datasets of images and audio, and we show results of a crowd sourced listening test that validate that the hidden information is indeed unobtrusive.
 
 
 
@@ -455,9 +455,9 @@ Though the experiments above are encouraging, SNR can be misleading; frequencies
 
 We have presented a model-based scheme for hiding artistic curves in audio, and the curves survive lossy compression while remaining reasonably imperceptible, as validated both with quantitative measurements and by humans.  We hide the dimensions of curves in time regularized magnitudes of STFT frequencies, though coefficients of any orthogonal decomposition could work (we also implemented wavelets, though we found them more audibly perceptible).  Our scheme is incredibly simple and requires no training.  Decoding is nearly instantaneous, as it only requires computing the STFT of a few frequencies. 
 
-To show off our pipeline, we created an interactive viewer in Javascript using WebGL that can load in and decode any mp3 file.  The viewer plays the decoded curve synchronized to the music.  We also provide a variety of 2D and 3D examples.  To view our source code for encoding and decoding and look at these examples, please visit \url{https://curvesteg.s3.amazonaws.com/index.html}
+To show off our pipeline, we created an interactive viewer in Javascript using WebGL that can load in and decode any mp3 file.  The viewer plays the decoded curve synchronized to the music.  We provide a variety of 2D and 3D precomputed examples to demonstrate our capabilities.  To view our source code for encoding and decoding and look at these examples, please visit \url{https://curvesteg.s3.amazonaws.com/index.html}
 
-
+%\footnote{Decoding is so quick that $\lambda$, $\ell$, and shift can be varied at interactive rates}
 
 %
 % ---- Bibliography ----
