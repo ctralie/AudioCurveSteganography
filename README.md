@@ -1,6 +1,8 @@
-# AudioCurveSteganography
+# Audio Curve Steganography Carried by Musical Audio
 
 ## <a href = "https://www.ctralie.com">Chris Tralie</a>
+
+## <a href = "https://arxiv.org/pdf/2301.12354.pdf">arXiv Paper Link</a>
 
 <img src = "figures/LambdaEffect.svg">
 
