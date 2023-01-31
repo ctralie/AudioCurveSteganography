@@ -1,6 +1,16 @@
 <html>
     <body>
-        <h1>Audio Curve Steganography 2D Examples</h1>
+
+        <h1>Audio Curve Steganography Carried by Musical Audio</h1>
+        <h2><a href = "https://www.ctralie.com">Chris Tralie</a></h2>
+        <h2><a href = "https://arxiv.org/pdf/2301.12354.pdf">arxiv paper link</a></h2>
+        <img src = "../../figures/LambdaEffect.svg">
+        <h2>Abstract</h2>
+        <p>
+            In this work, we create artistic closed loop curves that trace out images and 3D shapes, which we then hide in musical audio as a form of steganography. We use traveling salesperson art to create artistic plane loops to trace out image contours, and we use Hamiltonian cycles on triangle meshes to create artistic space loops that fill out 3D surfaces. Our embedding scheme is designed to faithfully preserve the geometry of these loops after lossy compression, while keeping their presence undetectable to the audio listener. To accomplish this, we hide each dimension of the curve in a different frequency, and we perturb a sliding window sum of the magnitude of that frequency to best match the target curve at that dimension, while hiding scale information in that frequency's phase. In the process, we exploit geometric properties of the curves to help to more effectively hide and recover them. Our scheme is simple and encoding happens efficiently with a nonnegative least squares framework, while decoding is trivial. We validate our technique quantitatively on large datasets of images and audio, and we show results of a crowd sourced listening test that validate that the hidden information is indeed unobtrusive.
+        </p>
+
+        <h2>2D Examples</h2>
         <iframe src="usher-baby-2d-fac1.html" width="90%" height="80%"></iframe>
         <iframe src="usher-baby-2d-fac0.1.html" width="90%" height="80%"></iframe>
         <iframe src="aerosmith-revolver-2d.html" width="90%" height="80%"></iframe>
@@ -10,7 +20,7 @@
         <iframe src="havoc-poop-2d.html" width="90%" height="80%"></iframe>
 
         <HR>
-        <h1>Audio Curve Steganography 3D Examples</h1>
+        <h2>3D Examples</h2>
         <iframe src="pinkfloyd-glass-3d.html" width="90%" height="80%"></iframe>
         <iframe src="dmb-ants-3d.html" width="90%" height="80%"></iframe>
         <iframe src="rollingstones-horse-3d.html" width="90%" height="80%"></iframe>
