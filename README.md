@@ -1,4 +1,4 @@
-# Audio Curve Steganography Carried by Musical Audio
+# Artistic Curve Steganography Carried by Musical Audio
 
 ## <a href = "https://www.ctralie.com">Chris Tralie</a>
 
