@@ -2,7 +2,9 @@
 
 ## <a href = "https://www.ctralie.com">Chris Tralie</a>
 
-## <a href = "https://arxiv.org/pdf/2301.12354.pdf">arXiv Paper Link</a>
+## <a href = "https://arxiv.org/pdf/2301.12354.pdf">Paper Link</a>
+
+### <a href = "https://www.evostar.org/2023/evomusart/">Proceedings of the 12th International Conference on Artificial Intelligence in Music, Sound, Art, And Design</a></h3>
 
 <img src = "figures/LambdaEffect.svg">
 
