@@ -187,7 +187,7 @@ def rejection_sample_by_density(weights, target_points):
                     return X
     return X
 
-def stochastic_universal_sample(weights, target_points, jitter=0.1):
+def stochastic_universal_sample(weights, target_points, jitter=0):
     """
     Sample pixels according to a particular density using 
     stochastic universal sampling
@@ -320,13 +320,13 @@ def voronoi_stipple(I, thresh, target_points, p=1, canny_sigma=0, edge_weight=1,
     return np.fliplr(X)
 
 
-def splat_voronoi_image(xy, X, xpix, ypix, I, ICPU, n_neighbs, temperature=20):
+def splat_voronoi_image(xy, X, xpix, ypix, I, ICPU, n_neighbs, temperature=20, use_lsqr=False):
     """
     Compute the Voronoi image associated to a set of xyrgb points in [0, 1]^5
 
     Parameters
     ----------
-    x: torch.tensor(n_points, 2)
+    xy: torch.tensor(n_points, 2)
         Coordinates of voronoi sites
     X: ndarray(M*N, 2)
         Pixel locations
@@ -342,6 +342,11 @@ def splat_voronoi_image(xy, X, xpix, ypix, I, ICPU, n_neighbs, temperature=20):
         Number of sites to use as nearest neighbors for each point
     temperature: float
         Temperature to use in softmax for neighbor weights
+    use_lsqr: bool
+        If true, solve for the RGB coordinates of the sites by using
+        linear least squares over a weights sytem.  If false, simply
+        make the RGB colors the average of the colors of the elements
+        belonging to the voronoi sites
     
     Returns
     -------
@@ -352,12 +357,13 @@ def splat_voronoi_image(xy, X, xpix, ypix, I, ICPU, n_neighbs, temperature=20):
     """
     import torch
     from scipy import sparse
-    from scipy.sparse import linalg as slinalg
     from scipy.spatial import KDTree
     ## Step 1: Compute distance from all pixels to landmarks
     tree = KDTree(xy.detach().cpu().numpy())
     _, idx = tree.query(X, k=n_neighbs) # Nearest landmark indices to pixels
-    
+    if n_neighbs == 1:
+        idx = idx[:, None]
+
     ## Step 2: Based on the landmark locations, compute the weight influence
     ## of each landmark on each pixel using softmax
     weights = torch.zeros(I.shape[0], n_neighbs).to(I)
@@ -372,26 +378,36 @@ def splat_voronoi_image(xy, X, xpix, ypix, I, ICPU, n_neighbs, temperature=20):
     
     ## Step 3: Compute the color of each landmark according to the weights
     ## by solving a sparse least squares system
-    pixidx = (np.arange(idx.shape[0])[:, None]*np.ones((1, n_neighbs))).flatten()
-    orig_shape = idx.shape
-    idx = idx.flatten()
-    weights = weights.flatten()
-    A = sparse.coo_matrix((weights.detach().cpu().numpy(), (pixidx, idx)), shape=(I.shape[0], xy.shape[0]))
-    rgb = np.ones((xy.shape[0], 3))
-    for channel in range(3):
-        rgb[:, channel] = slinalg.lsqr(A, ICPU[:, channel])[0]
-    rgb = torch.from_numpy(rgb).to(xy)
+    tic = time.time()
+    if use_lsqr:
+        from scipy.sparse import linalg as slinalg
+        pixidx = (np.arange(idx.shape[0])[:, None]*np.ones((1, n_neighbs))).flatten()
+        orig_shape = idx.shape
+        idx = idx.flatten()
+        weights = weights.flatten()
+        A = sparse.coo_matrix((weights.detach().cpu().numpy(), (pixidx, idx)), shape=(I.shape[0], xy.shape[0]))
+        rgb = np.ones((xy.shape[0], 3))
+        for channel in range(3):
+            rgb[:, channel] = slinalg.lsqr(A, ICPU[:, channel])[0]
+        rgb = torch.from_numpy(rgb).to(xy)
+        idx = np.reshape(idx, orig_shape)
+        weights = torch.reshape(weights, orig_shape)
+    else:
+        rows = ((idx[:, 0][:, None])*np.ones((1, 3))).flatten()
+        cols = (np.ones((idx.shape[0], 1))*(np.arange(3)[None, :])).flatten()
+        rgb = sparse.coo_matrix((ICPU.flatten(), (rows, cols)), shape=(xy.shape[0], 3)).toarray()
+        counts = sparse.coo_matrix((np.ones(idx.shape[0]), (idx[:, 0], np.zeros(idx.shape[0]))), shape=(xy.shape[0], 1)).toarray()
+        counts[counts == 0] = 1
+        rgb = torch.from_numpy(rgb/counts).to(xy)
     
     ## Step 4: Splat the colors from each landmark over the pixels within their influence
-    idx = np.reshape(idx, orig_shape)
-    weights = torch.reshape(weights, orig_shape)
     J = torch.zeros(I.shape).to(I)
     for i in range(n_neighbs):
         J += rgb[idx[:, i], :]*(weights[:, i].view(weights.shape[0], 1))
     return J, rgb
 
 
-def get_voronoi_image(I, device, n_points, n_neighbs=2, n_iters=50, lr=2e-2, do_weight_plot=False, plot_iter_interval=0, verbose=False):
+def get_voronoi_image(I, device, n_points, n_neighbs=2, n_iters=50, lr=2e-2, do_weight_plot=False, plot_iter_interval=0, use_lsqr=False, verbose=False):
     """
     Compute a set of Voronoi sites best fit to an image
 
@@ -411,6 +427,11 @@ def get_voronoi_image(I, device, n_points, n_neighbs=2, n_iters=50, lr=2e-2, do_
         Whether to make a plot showing the weights
     plot_iter_interval: int
         If > 0, make a plot showing the gradient descent every time this number of iterations passes
+    use_lsqr: bool
+        If true, solve for the RGB coordinates of the sites by using
+        linear least squares over a weights sytem.  If false, simply
+        make the RGB colors the average of the colors of the elements
+        belonging to the voronoi sites
     verbose: bool
         Whether to plot information about the iterations
 
@@ -422,6 +443,8 @@ def get_voronoi_image(I, device, n_points, n_neighbs=2, n_iters=50, lr=2e-2, do_
         x/y coordinates of Voronoi sites
     rgb: torch.tensor(n_points, 3)
         Voronoi site colors
+    final_cost: float
+        Final error of the optimization
     """
     from skimage import filters
     import torch
@@ -438,7 +461,7 @@ def get_voronoi_image(I, device, n_points, n_neighbs=2, n_iters=50, lr=2e-2, do_
         IGray = 0.2125*IGray[:, :, 0] + 0.7154*IGray[:, :, 1] + 0.0721*IGray[:, :, 2]
 
     weights = filters.sobel(IGray)
-    xy = rejection_sample_by_density(weights, n_points)
+    xy = stochastic_universal_sample(weights, n_points)
     xy = np.array(np.fliplr(xy))
     xy[:, 0] /= N
     xy[:, 1] /= M
@@ -482,7 +505,7 @@ def get_voronoi_image(I, device, n_points, n_neighbs=2, n_iters=50, lr=2e-2, do_
         tic = time.time()
         optimizer.zero_grad()
         
-        J, rgb = splat_voronoi_image(torch.sigmoid(xy), X, xpix, ypix, I, ICPU, n_neighbs)
+        J, rgb = splat_voronoi_image(torch.sigmoid(xy), X, xpix, ypix, I, ICPU, n_neighbs, use_lsqr=use_lsqr)
         img_cost = torch.sum((I-J)**2)
         loss = img_cost
         img_costs.append(img_cost.item())
@@ -523,4 +546,7 @@ def get_voronoi_image(I, device, n_points, n_neighbs=2, n_iters=50, lr=2e-2, do_
         if verbose:
             print("Iteration {}, Loss {:.3f}, Elapsed Time: {:.3f}".format(i, img_costs[-1], time.time()-tic))
     
-    return J, xy, rgb
+    # Use only one neighbor for the final image
+    J, rgb = splat_voronoi_image(torch.sigmoid(xy), X, xpix, ypix, I, ICPU, 1)
+    final_cost = torch.sum((I-J)**2)
+    return torch.reshape(J.detach().cpu(), I_orig.shape), xy, rgb, final_cost.item()
