@@ -168,10 +168,10 @@ def rejection_sample_by_density(weights, target_points):
     
     Returns
     -------
-    ndarray(N, 2)
-        Location of point samples
+    uv: ndarray(N, 2)
+        Location of point samples, in units of pixels
     """
-    X = np.zeros((target_points, 2))
+    uv = np.zeros((target_points, 2))
     idx = 0
     while idx < target_points:
         print(idx)
@@ -181,11 +181,11 @@ def rejection_sample_by_density(weights, target_points):
         for i, j, p in zip(I, J, P):
             weight = weights[int(np.floor(i)), int(np.floor(j))]
             if p < weight:
-                X[idx, :] = [i, j]
+                uv[idx, :] = [i, j]
                 idx += 1
                 if idx == target_points:
-                    return X
-    return X
+                    return uv
+    return uv
 
 def stochastic_universal_sample(weights, target_points, jitter=0):
     """
@@ -203,8 +203,8 @@ def stochastic_universal_sample(weights, target_points, jitter=0):
     
     Returns
     -------
-    ndarray(N, 2)
-        Location of point samples
+    uv: ndarray(N, 2)
+        Location of point samples, in units of pixels
     """
     choices = np.zeros(target_points, dtype=int)
     w = np.zeros(weights.size+1)
@@ -220,10 +220,10 @@ def stochastic_universal_sample(weights, target_points, jitter=0):
         idx = idx % weights.size
         choices[i] = order[idx]
         p = (p + 1/target_points) % 1
-    X = np.array(list(np.unravel_index(choices, weights.shape)), dtype=float).T
+    uv = np.array(list(np.unravel_index(choices, weights.shape)), dtype=float).T
     if jitter > 0:
-        X += jitter*np.random.randn(X.shape[0], 2)
-    return X
+        uv += jitter*np.random.randn(uv.shape[0], 2)
+    return uv
 
 
 
@@ -448,6 +448,10 @@ def get_voronoi_image(I, device, n_points, n_neighbs=2, n_iters=50, lr=2e-2, do_
     """
     from skimage import filters
     import torch
+    if len(I.shape) == 3:
+        if I.shape[1] > 3:
+            # Cut off alpha channel
+            I = I[:, :, 0:3]
     ## Load Images
     I_orig = I
     M = I.shape[0]
