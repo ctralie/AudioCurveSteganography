@@ -435,6 +435,38 @@ def splat_voronoi_image(xy, X, xpix, ypix, I, ICPU, n_neighbs, temperature=20, u
     return J, rgb, counts > 0
 
 
+def splat_voronoi_image_1nn(Y, M, N):
+    """
+    Splat a voronoi image on a grid of an arbitrary size
+
+    Parameters
+    ----------
+    Y: ndarray(N, 5)
+        xyrgb coordinates
+    M: int
+        Number of rows
+    N: int
+        Number of columns
+    
+    Returns
+    -------
+    ndarray(M, N, 3)
+        Voronoi image
+    """
+    from scipy.spatial import KDTree
+    xpix, ypix = np.meshgrid(np.linspace(0, 1, N), np.linspace(0, 1, M), indexing='xy')
+    xpix = xpix.flatten()
+    ypix = ypix.flatten()
+    X = np.array([xpix, ypix]).T
+
+    tree = KDTree(Y[:, 0:2])
+    _, idx = tree.query(X, k=1) # Nearest landmark indices to pixels
+    idx = idx.flatten()
+    J = Y[idx, 2::]
+    J = np.reshape(J, (M, N, 3))
+    return J
+
+
 def get_voronoi_image(I, device, n_points, n_neighbs=2, n_iters=50, lr=2e-2, do_weight_plot=False, plot_iter_interval=0, use_lsqr=False, verbose=False):
     """
     Compute a set of Voronoi sites best fit to an image
