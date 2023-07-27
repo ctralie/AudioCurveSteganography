@@ -2,6 +2,9 @@ import librosa
 import numpy as np
 import torch
 from torch import nn
+from scipy.io import wavfile
+import subprocess
+import os
 
 ################################################
 # Loudness code modified from original Google Magenta DDSP implementation in tensorflow
@@ -110,3 +113,38 @@ def get_filtered_noise(H, A, win_length):
     ola[:, hop_length:hop_length+n_odd*win_length] += y[:, 1::2, :].reshape(n_batches, n_odd*win_length)
     
     return ola
+
+def get_mp3_noise(X, sr):
+    """
+    Compute the mp3 noise of a batch of audio samples using ffmpeg
+    as a subprocess
+    
+    Parameters
+    ----------
+    X: torch.tensor(n_batches, n_samples, 1)
+        Audio samples
+    sr: int
+        Audio sample rate
+    
+    Returns
+    -------
+    torch.tensor(n_batches, n_samples, 1)
+        mp3 noise
+    """
+    orig_T = X.shape[1]
+    X = nn.functional.pad(X, (0, X.shape[1]//4, 0, 0))
+    x = X.detach().cpu().numpy().flatten()
+    x = np.array(x*32768, dtype=np.int16)
+    fileprefix = "temp{}".format(np.random.randint(1000000))
+    wavfilename = "{}.wav".format(fileprefix)
+    mp3filename = "{}.mp3".format(fileprefix)
+    wavfile.write(wavfilename, sr, x)
+    if os.path.exists(mp3filename):
+        os.remove(mp3filename)
+    subprocess.call("ffmpeg -i {} {}".format(wavfilename, mp3filename).split(), stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    x, _ = librosa.load(mp3filename, sr=sr)
+    os.remove(wavfilename)
+    os.remove(mp3filename)
+    x = np.reshape(x, X.shape)
+    Y = torch.from_numpy(x).to(X) - X
+    return Y[:, 0:orig_T]
