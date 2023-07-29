@@ -181,3 +181,29 @@ def get_chroma_filterbank(sr, win, o1=-4, o2=4):
             bump = torch.exp(-(freqs-fc)**2/(2*sigma**2))
             C[:, p] += bump
     return C
+
+def get_batch_chroma(X, win_length, hop_length, hann, chroma_filterbank):
+    """
+    Compute the chroma on a batch of audio samples
+
+    Parameters
+    ----------
+    X: torch.tensor(n_batches, time_samples)
+        Batches of audio samples
+    win_length: int
+        Window length
+    hop_length: int
+        Hop length
+    hann: torch.tensor(win_length)
+        Hann window
+    chroma_filterbank: torch.tensor(floor(win_length/2)+1, 12)
+        Chroma filterbank
+    
+    Returns
+    -------
+    torch.tensor(n_batches, (time_samples-win_length)//hop_length+1, 12)
+        Chroma for audio batches
+    """
+    S = torch.abs(torch.stft(X, win_length, hop_length, win_length, hann, return_complex=True, center=False))
+    C = torch.einsum('ijk, jl -> ilk', S, chroma_filterbank)
+    return C.swapaxes(1, 2)

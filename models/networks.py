@@ -54,26 +54,30 @@ class CurveEncoder(nn.Module):
         
         self.YMLP = MLP(mlp_depth, 5, n_units) # Curve MLP
         self.LMLP = MLP(mlp_depth, 1, n_units) # Loudness MLP
+        self.CMLP = MLP(mlp_depth, 12, n_units) # Chroma MLP
         
-        self.gru = nn.GRU(input_size=n_units*2, hidden_size=n_units, num_layers=1, bias=True, batch_first=True)
+        self.gru = nn.GRU(input_size=n_units*3, hidden_size=n_units, num_layers=1, bias=True, batch_first=True)
         self.FinalMLP = MLP(mlp_depth, n_units*3, n_units)
         self.TapsDecoder = nn.Linear(n_units, n_taps)
         self.AmplitudeDecoder = nn.Linear(n_units, 1)
         
     
-    def forward(self, Y, L):
+    def forward(self, Y, L, C):
         """
         Parameters
         ----------
         Y: torch.tensor(n_batches, T, 5)
             xyrgb samples
         L: torch.tensor(n_batches, T, 1)
-            
+            Loudness samples
+        C: torch.tensor(n_batches, T, 12)
+            Chroma samples
         """
         YOut = self.YMLP(Y)
         LOut = self.LMLP(L)
-        YL = torch.concatenate((YOut, LOut), axis=2)
-        G = self.gru(YL)[0]
+        COut = self.CMLP(C)
+        YLC = torch.concatenate((YOut, LOut, COut), axis=2)
+        G = self.gru(YLC)[0]
         G = torch.concatenate((YOut, LOut, G), axis=2)
         final = self.FinalMLP(G)
         H = nn.functional.tanh(self.TapsDecoder(final))
