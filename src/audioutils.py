@@ -148,3 +148,36 @@ def get_mp3_noise(X, sr):
     x = np.reshape(x, X.shape)
     Y = torch.from_numpy(x).to(X) - X
     return Y[:, 0:orig_T]
+
+def get_chroma_filterbank(sr, win, o1=-4, o2=4):
+    """
+    Compute a chroma matrix
+    
+    Parameters
+    ----------
+    sr: int
+        Sample rate
+    win: int
+        STFT Window length
+    o1: int
+        Octave to start
+    o2: int
+        Octave to end
+    
+    Returns
+    -------
+    tensor(floor(win/2)+1, 12)
+        A matrix, where each row has a bunch of Gaussian blobs
+        around the center frequency of the corresponding note over
+        all of its octaves
+    """
+    K = win//2+1 # Number of non-redundant frequency bins
+    C = torch.zeros((K, 12)) # Create the matrix
+    freqs = sr*torch.arange(K)/win # Compute the frequencies at each spectrogram bin
+    for p in range(12):
+        for octave in range(o1, o2+1):
+            fc = 440*2**(p/12 + octave)
+            sigma = 0.02*fc
+            bump = torch.exp(-(freqs-fc)**2/(2*sigma**2))
+            C[:, p] += bump
+    return C

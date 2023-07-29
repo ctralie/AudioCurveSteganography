@@ -73,6 +73,7 @@ class AudioData(Dataset):
         self.n_samples = hop_length*(T-1)+win_length
         self.samples = []
         self.loudnesses = []
+        self.chromas = []
         for filename in glob.glob(file_pattern):
             x, _ = librosa.load(filename, sr=sr)
             loudness = extract_loudness(x, sr, hop_length, n_fft=win_length)
