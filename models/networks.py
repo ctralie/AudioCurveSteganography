@@ -94,7 +94,7 @@ class CurveEncoder(nn.Module):
 
         
 class CurveDecoder(nn.Module):
-    def __init__(self, mlp_depth, n_units, win_length):
+    def __init__(self, mlp_depth, n_units, win_length, voronoi=True):
         """
         Parameters
         ----------
@@ -104,9 +104,12 @@ class CurveDecoder(nn.Module):
             Number of units in each multilayer perceptron
         win_length: int
             Length of window for each windowed audio chunk
+        voronoi: bool
+            If True, use voronoi images.  If False, use wavelet images
         """
         super(CurveDecoder, self).__init__()
         self.win_length = win_length
+        self.voronoi = voronoi
         
         self.SMLP = MLP(mlp_depth, win_length//2+1, n_units) # STFT MLP
         
@@ -131,7 +134,14 @@ class CurveDecoder(nn.Module):
         G = self.gru(SOut)[0]
         G = torch.concatenate((SOut, G), axis=2)
         final = self.FinalMLP(G)
-        return modified_sigmoid(self.YDecoder(final))
+        final = self.YDecoder(final)
+        if self.voronoi:
+            res = modified_sigmoid(final)
+        else:
+            xy = nn.functional.leaky_relu(final[:, :, 0:2])
+            rgb = nn.functional.tanh(final[:, :, 2::])
+            res = (xy, rgb)
+        return res
     
     def get_num_parameters(self):
         total = 0

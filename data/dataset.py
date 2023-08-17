@@ -9,29 +9,35 @@ sys.path.append("../src")
 from audioutils import extract_loudness
 
 class CurveData(Dataset):
-    def __init__(self, rg, voronoi_samples, T, samples_per_batch):
+    def __init__(self, rg, tour_samples, T, samples_per_batch, voronoi=True):
         """
         Parameters
         ----------
         rg: list(int)
             List of indices to take in each image class (used for test/train split)
-        voronoi_samples: int
-            Number of samples in the Voronoi image
+        tour_samples: int
+            Number of samples in each TSP tour
         T: int
             Number of samples to take in each chunk
         samples_per_batch: int
             Number of samples per batch
+        voronoi: bool
+            If True, use voronoi images.  If False, use wavelet images
         """
         self.files = []
         for c in glob.glob("../data/imagenet/*"): # Go through each class
             files = glob.glob("{}/*.pkl".format(c))
+            if voronoi:
+                files = [f for f in files if not "wavelet" in f]
+            else:
+                files = [f for f in files if "wavelet" in f]
             files = sorted(files)
             self.files += [files[i] for i in rg]
         # Load in all curves
         self.Ys = []
         for file in self.files:
             res = pickle.load(open(file, "rb"))
-            Y = res[voronoi_samples]["Y"]
+            Y = res[tour_samples]["Y"]
             if Y.shape[0] >= T:
                 self.Ys.append(np.array(Y, dtype=np.float32))
         self.T = T
