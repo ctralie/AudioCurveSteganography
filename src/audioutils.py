@@ -207,3 +207,33 @@ def get_batch_chroma(X, win_length, hop_length, hann, chroma_filterbank):
     S = torch.abs(torch.stft(X, win_length, hop_length, win_length, hann, return_complex=True, center=False))
     C = torch.einsum('ijk, jl -> ilk', S, chroma_filterbank)
     return C.swapaxes(1, 2)
+
+def get_batch_stft_noise(S, f1, f2, A, win_length, hop_length, winfn):
+    """
+    Companion function to CurveSTFTEncoder
+
+    S: torch.tensor(n_batches, win_length//2+1, T)
+        STFT batches
+    f1: int
+        Index of first frequency
+    f2: int
+        Index of second frequency
+    A: torch.tensor(n_batches, T, f2-f1+1)
+        Amplitudes of frequencies to synthesize
+    win_length: int
+        Window length of stft
+    hop_length: int
+        Hop length of stft
+    winfn: torch.tensor
+        Window function
+    
+    Returns
+    -------
+    torch.tensor(n_batches, (T-1)*hop_length + win_length)
+        Audio samples
+    """
+    A = A.swapaxes(1, 2)
+    S2 = torch.zeros(S.shape, dtype=torch.complex64)
+    S2 = S2.to(S.device)
+    S2[:, f1:f2+1, 0:A.shape[2]] += S[:, f1:f2+1, 0:A.shape[2]]*A
+    return torch.istft(S2, win_length, hop_length, win_length, winfn)
