@@ -60,6 +60,71 @@ def extract_loudness(x, sr, hop_length, n_fft=512):
 ################################################
 
 
+def get_zerophase_filtered_signals(H, X, A, win_length, renorm_amp=False):
+    """
+    Perform subtractive synthesis by applying FIR filters to windows
+    and summing overlap-added versions of them together
+    
+    Parameters
+    ----------
+    H: torch.tensor(n_batches x time x n_coeffs)
+        FIR filters for each window for each batch
+    X: torch.tensor(n_batches, hop_length*(time-1)+win_length)
+        Signal to filter
+    A: torch.tensor(n_batches x time x 1)
+        Amplitudes for each window for each batch
+    win_length: int
+        Window length of each chunk to which to apply FIR filter.
+        Hop length is assumed to be half of this
+    renorm_amp: bool
+        If true, make sure each filtered window has the same standard 
+        deviation as the original window
+        
+    Returns
+    -------
+    torch.tensor(n_batches, hop_length*(time-1)+win_length)
+        Filtered signal for each batch
+    """
+    n_batches = H.shape[0]
+    T = H.shape[1]
+    n_coeffs = H.shape[2]
+    hop_length = win_length//2
+    n_samples = hop_length*(T-1)+win_length
+
+    ## Pad impulse responses
+    H = nn.functional.pad(H, (0, win_length*2-n_coeffs))
+
+    ## Take out each overlapping window of noise
+    N = torch.zeros(n_batches, T, win_length*2).to(H)
+    n_even = n_samples//win_length
+    N[:, 0::2, 0:win_length] = X[:, 0:n_even*win_length].view(n_batches, n_even, win_length)
+    n_odd = T - n_even
+    N[:, 1::2, 0:win_length] = X[:, hop_length:hop_length+n_odd*win_length].view(n_batches, n_odd, win_length)
+    
+    ## Perform a zero-phase version of each filter and window
+    FH = torch.fft.rfft(H)
+    FH = torch.real(FH)**2 + torch.imag(FH)**2 # Make it zero-phase
+    FN = torch.fft.rfft(N)
+    y = torch.fft.irfft(FH*FN)[..., 0:win_length]
+
+    # Renormalize if necessary, then apply amplitude to each window
+    if renorm_amp:
+        a_before = torch.std(N[:, :, 0:win_length], dim=1, keepdims=True)
+        a_after = torch.std(y, dim=1, keepdims=True)
+        y = y*a_before/(a_after+1e-5)
+    y = y*A
+
+
+    # Apply hann window before overlap-add
+    y = y*torch.hann_window(win_length).to(y)
+
+    ## Overlap-add everything
+    ola = torch.zeros(n_batches, n_samples).to(y)
+    ola[:, 0:n_even*win_length] += y[:, 0::2, :].reshape(n_batches, n_even*win_length)
+    ola[:, hop_length:hop_length+n_odd*win_length] += y[:, 1::2, :].reshape(n_batches, n_odd*win_length)
+    
+    return ola
+
 def get_filtered_noise(H, A, win_length):
     """
     Perform subtractive synthesis by applying FIR filters to windows
@@ -82,37 +147,11 @@ def get_filtered_noise(H, A, win_length):
     """
     n_batches = H.shape[0]
     T = H.shape[1]
-    n_coeffs = H.shape[2]
     hop_length = win_length//2
     n_samples = hop_length*(T-1)+win_length
-
-    ## Pad impulse responses and generate noise
-    H = nn.functional.pad(H, (0, win_length*2-n_coeffs))
     noise = torch.randn(n_batches, n_samples).to(H)
+    return get_zerophase_filtered_signals(H, noise, A, win_length)
 
-    ## Take out each overlapping window of noise
-    N = torch.zeros(n_batches, T, win_length*2).to(H)
-    n_even = n_samples//win_length
-    N[:, 0::2, 0:win_length] = noise[:, 0:n_even*win_length].view(n_batches, n_even, win_length)
-    n_odd = T - n_even
-    N[:, 1::2, 0:win_length] = noise[:, hop_length:hop_length+n_odd*win_length].view(n_batches, n_odd, win_length)
-    
-    # Apply amplitude to each window
-    N = N*A
-    
-    ## Perform a zero-phase version of each filter and window
-    FH = torch.fft.rfft(H)
-    FH = torch.real(FH)**2 + torch.imag(FH)**2 # Make it zero-phase
-    FN = torch.fft.rfft(N)
-    y = torch.fft.irfft(FH*FN)[..., 0:win_length]
-    y = y*torch.hann_window(win_length).to(y)
-
-    ## Overlap-add everything
-    ola = torch.zeros(n_batches, n_samples).to(y)
-    ola[:, 0:n_even*win_length] += y[:, 0::2, :].reshape(n_batches, n_even*win_length)
-    ola[:, hop_length:hop_length+n_odd*win_length] += y[:, 1::2, :].reshape(n_batches, n_odd*win_length)
-    
-    return ola
 
 def get_mp3_noise(X, sr):
     """
