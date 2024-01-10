@@ -16,9 +16,9 @@
         <h3 style="color:red">Updates!</h3>
         <ul>
             <li>
-                <b>1/19/2024</b>: The original version of this paper modified non-overlapping STFT windows individually, but this sometimes leads to audible "clicks," especially in quieter regions of the audio (such as around ~27 seconds into the Usher tune).  To improve this, I introduced a new parameter <b>L<SUB>T</SUB></b>, as dubbed by Hu/Wu/Lee in their recent paper "<a href = "https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=10099448">FFT-Based Dual-Mode Blind Watermarking for Hiding Binary Logos and Color Images in Audio</a>," which came out around the same time as my paper.  This parameter introduces a small buffer in between each non-overlapping frame to allow for smoother transitions.  See section III of their paper for more details.
+                <b>1/9/2024</b>: The original version of this paper modified non-overlapping STFT windows individually, but this sometimes leads to audible "clicks," especially in quieter regions of the audio (such as around ~27 seconds into the Usher tune).  To improve this, I introduced a new parameter <b>L<SUB>T</SUB></b>, as dubbed by Hu/Wu/Lee in their recent paper "<a href = "https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=10099448">FFT-Based Dual-Mode Blind Watermarking for Hiding Binary Logos and Color Images in Audio</a>," which came out around the same time as my paper.  This parameter introduces a small buffer in between each non-overlapping frame to allow for smoother transitions.  See section III of their paper for more details.
                 <p>
-                    I've added a new example as the first 2D example below showing this on the Usher tune, but I've left the original examples there as well.  You'll hear the difference towards the end of the usher tune with <b>&lambda;=0.1</b>.  Beyond that, I've updated some of the other examples, which I've indicated below
+                    I've added a new example as the first 2D example below showing this on the Usher tune, but I've left the original examples there as well.  You'll hear the difference towards the end of the usher tune with <b>&lambda;=0.1</b>.  Beyond that, I've updated some of the other examples, which I've indicated below.
                 </p>
                 
                 

@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Audio Curve Steganography Viewer</title>
+    <script src="../jslibs/jquery-3.5.1.min.js"></script>
+    <script src="../jslibs/jquery.ajax.arraybuffer.min.js"></script>
+    <script src="../jslibs/base64-arraybuffer.js"></script>
+    <script src="../jslibs/gl-matrix-min.js"></script>
+    <script src="../jslibs/dat.gui.min.js"></script>
+    <script src="../wav.js"></script>
+    <script src="../colormaps.js"></script>
+    <script src="../progressbar.js"></script>
+    <script src="../cameras3d.js"></script>
+    <script src="../stegcanvas.js"></script>
+    <script src="../audio.js"></script>
+  </head>
+  <body>
+    Usher's Face Hidden in Usher's "There Goes My Baby" by Usher</b></h2>
+    <h3>
+      &ell;=16, &lambda; = 0.1, <span style="color:red">LT = 64</span> snr=5.68dB, Mean Distortion = 0.009 (<span style="color:red">De-Clicked Version 1/9/2024</span>)
+    </h3>
+    <audio controls id="audioPlayer" style="width: 80%;">
+      Your browser does not support the audio element.
+    </audio> 
+    <table id="pageStatusWrapper">
+      <tr>
+          <td><span id="pagestatus"><h4>Welcome!  Choose a tune 🎵 to start</h4></span></td>
+      </tr>
+    </table>
+    <div id="canvasArea"></div>
+
+    <script>
+      DSP_WORKER_PATH = "../dspworker.js";
+      let audioPlayer = document.getElementById("audioPlayer");
+      let audio = new SampledAudio(audioPlayer);
+      const canvasArea = document.getElementById("canvasArea");
+      audio.loadFile("usher-baby-2d-fac0.1_LT64.mp3", canvasArea, {"LT":64});
+    </script>
+
+    </body>
+</html>
