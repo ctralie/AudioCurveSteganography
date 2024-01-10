@@ -28,3 +28,7 @@ https://en.wikipedia.org/wiki/Westminster_Quarters#/media/File:Big_ben_closeup.j
 
 Rick Astley:
 https://upload.wikimedia.org/wikipedia/en/b/bf/UltimateRick.jpg
+
+
+Kid, Porcupine:
+https://codegolf.stackexchange.com/questions/50299/draw-an-image-as-a-voronoi-map

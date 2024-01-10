@@ -45,33 +45,35 @@ class UFFast:
 class GraphNode:
     def __init__(self):
         self.edges = []
-        self.data = {}
+        self.coords = []
 
-def get_mst_kruskal(nodes, edges):
-    """
-    Compute the minimum spanning tree using Kruskal's algorihtm
-    """
-    edges = sorted(edges, key = lambda e: e[2])
-    djset = UFFast(len(nodes))
-    new_edges = []
-    for e in edges:
-        (i, j, d) = e
-        if not djset.find(i, j):
-            djset.union(i, j)
-            new_edges.append(e)
-            nodes[i].edges.append(nodes[j])
-            nodes[j].edges.append(nodes[i])
-    return new_edges
 
-def make_delaunay_graph(X):
+def make_2d_delaunay_graph(X):
+    """
+    Make a Delaunay graph using the first two coordinates
+    of a point set
+
+    Parameters
+    ----------
+    X: ndarray(N, d)
+        Point cloud
+
+    Returns
+    -------
+    nodes: list of GraphNode
+        Nodes in the graph
+    edges: ndarray(M, 3)
+        List of [node index 1, node index 2, dist] of edges
+        in the graph
+    """
     from scipy.spatial import Delaunay
     N = X.shape[0]
     nodes = []
     for i in range(N):
         n = GraphNode()
-        n.data = {'x':X[i, 0], 'y':X[i, 1]}
+        n.coords = X[i, :]
         nodes.append(n)
-    tri = Delaunay(X).simplices
+    tri = Delaunay(X[:, 0:2]).simplices
     edges = set()
     for i in range(tri.shape[0]):
         for k in range(3):
@@ -81,14 +83,72 @@ def make_delaunay_graph(X):
             edges.add((i1, i2, d))
     return nodes, list(edges)
 
-def do_dfs(node, order):
-    if not node.visited:
-        order.append(node)
-    node.visited = True
-    for other in node.edges:
-        if not other.visited:
-            do_dfs(other, order)
 
+def get_mst_kruskal(nodes, edges):
+    """
+    Compute the minimum spanning tree using Kruskal's algorithm
+
+    Parameters
+    ----------
+    nodes: list of GraphNode
+        Nodes in the graph
+    edges: ndarray(M, 3)
+        List of [node index 1, node index 2, dist] of edges
+        in the graph
+
+    Parameters
+    ----------
+    nodes: list of GraphNode
+        Nodes in the MST
+    edges: ndarray(M, 3)
+        List of [node index 1, node index 2, dist] of edges
+        in the tree
+    """
+    edges = sorted(edges, key = lambda e: e[2])
+    djset = UFFast(len(nodes))
+    new_edges = []
+    new_nodes = []
+    for n in nodes:
+        new_node = GraphNode()
+        new_node.coords = n.coords
+        new_nodes.append(new_node)
+    for e in edges:
+        (i, j, d) = e
+        if not djset.find(i, j):
+            djset.union(i, j)
+            new_edges.append(e)
+            new_nodes[i].edges.append(new_nodes[j])
+            new_nodes[j].edges.append(new_nodes[i])
+    return new_nodes, new_edges
+
+
+def do_dfs(start):
+    """
+    Perform a depth-first search starting at a node.  This
+    method assumes all nodes have the parameter visited set
+    to False at the beginning
+
+    Parameters
+    ----------
+    start: GraphNode
+        Node at which to start the DFS
+    
+    Returns
+    -------
+    list of GraphNode
+        Nodes in the order DFS visited them
+    """
+    order = []
+    stack = [start]
+    while len(stack) > 0:
+        node = stack.pop()
+        if not node.visited:
+            order.append(node)
+        node.visited = True
+        for other in node.edges:
+            if not other.visited:
+                stack.append(other)
+    return order
 
 @jit(nopython=True)
 def get_improvement_indices(Y, i_last):
@@ -181,15 +241,14 @@ def get_tsp_tour(X, max_iters=10000, plot_interval=0):
     ndarray(N, 2)
         TSP Tour
     """
-    nodes, edges = make_delaunay_graph(X)
-    get_mst_kruskal(nodes, edges)
-    order = []
+    nodes, edges = make_2d_delaunay_graph(X)
+    nodes, edges = get_mst_kruskal(nodes, edges)
     for i, node in enumerate(nodes):
         node.visited = False
         node.i = i
-    do_dfs(nodes[0], order)
+    order = do_dfs(nodes[0])
     order.append(order[0])
-    X = np.array([[n.data['x'], n.data['y']] for n in nodes])
+    X = np.array([n.coords for n in nodes])
     idxs = [n.i for n in order]
     idxs = refine_tour(X, idxs, max_iters=max_iters, plot_interval=plot_interval)
     return X[idxs[0:-1], :]

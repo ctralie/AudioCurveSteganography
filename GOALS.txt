@@ -2,11 +2,6 @@ Main Goals
 * The hidden data should be audibly imperceptible (though it does not need to be statistically imperceptible)
 * The hidden data should be robust to compression
 * It should be possible to decode the data without any prior knowledge like a key
-* The embedding should adapt to the carrier, since this has been shown in the literature to allow better hiding
 * The hidden data should be robust to frame misalignment, or it should be possible to recover a frame alignment without any prior information
-
--------------------------------
-Bonus Goals
-It should be possible to stream the image as the audio is playing
-The hidden signal should be robust to channel noise and echoes
-
+* It should be possible to stream the image as the audio is playing
+* The hidden signal should be robust to channel noise and echoes (this is the toughest goal, and I will accept incremental progress towards it)

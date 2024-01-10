@@ -17,7 +17,7 @@
   <body>
     <h2>A 3D Horse Model Hidden in "Wild Horses" by The Rolling Stones</h2>
     <h3>
-      &ell;=16, &lambda; = 0.5, snr=9dB, Mean Distortion = 0.063
+      &ell;=16, &lambda; = 0.5,  <span style="color:red">LT = 64</span>, snr=8.7dB, Mean Distortion = 0.034, <span style="color:red">De-clicked version 1/9/2024</span>
     </h3>
     <p>
       Click and drag to rotate!
@@ -37,7 +37,7 @@
       let audioPlayer = document.getElementById("audioPlayer");
       let audio = new SampledAudio(audioPlayer);
       const canvasArea = document.getElementById("canvasArea");
-      audio.loadFile("rollingstones-horse-3d.mp3", canvasArea, {"freq1":3, "freq2":2, "freq3":1});
+      audio.loadFile("rollingstones-horse-3d.mp3", canvasArea, {"freq1":3, "freq2":2, "freq3":1, "LT":64});
     </script>
 
     </body>

@@ -128,27 +128,113 @@ def istft(pS, W, H, winfunc=blackman):
         X[i*H:i*H+W] += win*np.fft.ifft(S[:, i])
     return X
 
-
 def stft_disjoint(x, win_length):
     """
     Make the hop length and the win length the same
+
+    Parameters
+    ----------
+    x: ndarray(N):
+        Audio samples
+    win_length: int
+        Window length to use
+    
+    Returns
+    -------
+    S: ndarray(win_length//2+1, N//win_length)
+        Audio spectrogram
     """
     M = x.size//win_length
     S = np.zeros((win_length//2+1, M), dtype=complex)
     for i in range(M):
         xi = x[i*win_length:(i+1)*win_length]
-        S[:, i] = np.fft.fft(xi)[0:S.shape[0]]
+        S[:, i] = np.fft.rfft(xi)
     return S
 
 def istft_disjoint(S):
     w = (S.shape[0]-1)*2
     x = np.zeros(S.shape[1]*w)
     for i in range(S.shape[1]):
-        si = S[:, i]
-        si = np.concatenate((si, np.conj(si[-2:0:-1])))
-        xi = np.fft.ifft(si)
-        x[i*w:(i+1)*w] = np.real(xi)
+        x[i*w:(i+1)*w] = np.fft.irfft(S[:, i])
     return x
+
+def stft_disjoint_gaps(x, win_length, LT):
+    """
+    Parameters
+    ----------
+    x: ndarray(N):
+        Audio samples
+    win_length: int
+        Window length to use
+    LT: int
+        Buffer length for transitions in between STFT windows.  This is referred to as "LT" in 
+        "FFT-Based Dual-Mode Blind Watermarking for Hiding Binary Logos and Color Images in Audio"
+        Hu/Wu/Lee 2023
+    
+    Returns
+    -------
+    S: ndarray(win_length//2+1, n_windows)
+        Audio spectrogram
+    X: ndarray(n_windows, win_length)
+        Audio samples for each window in S
+    gaps: ndarray(n_windows, LT)
+        Samples of gaps in between
+    """
+    print("Doing Gaps: win_length {}, LT {}".format(win_length, LT))
+    N = len(x)
+    X = []
+    gaps = []
+    i = 0
+    while i + win_length <= N:
+        xi = x[i:i+win_length]
+        i += win_length
+        X.append(xi)
+        if i + LT <= N:
+            gaps.append(x[i:i+LT])
+        i += LT
+    gaps = np.array(gaps)
+    X = np.array(X)
+    S = np.fft.rfft(X, axis=1).T
+    return S, X, gaps
+
+def istft_disjoint_gaps(S, X_Orig, gaps):
+    """
+    S: ndarray(win_length//2+1, n_windows)
+        Audio spectrogram
+    X_Orig: ndarray(n_windows, win_length)
+        Original audio samples in each window before modifications
+    gaps: ndarray(n_windows, LT)
+        Samples of gaps in between original audio windows
+    
+    Returns
+    -------
+    x: ndarray(N)
+        Reconstructed audio samples
+    """
+    win_length = X_Orig.shape[1]
+    LT = gaps.shape[1]
+    X = istft_disjoint(S)
+    X = np.reshape(X, (X.size//win_length, win_length))
+    x = np.zeros((X_Orig.shape[0]-1)*(win_length+LT)) # Final audio samples
+    idx = 0
+    n = np.arange(LT)
+    for i in range(X.shape[0]-1):
+        x1_orig = X_Orig[i]
+        x1 = X[i]
+        x2 = X[i+1]
+        x2_orig = X_Orig[i+1]
+        x[idx:idx+win_length] = x1
+        idx += win_length
+        # Formula from Hu 2023
+        diff1 = x1[-1] - x1_orig[-1]
+        diff2 = x2[0]  - x2_orig[0]
+        x[idx:idx+LT] = gaps[i] + ((LT-n)/(LT+1))*diff1 + (n+1)/(LT+1)*diff2
+        idx += LT
+    x = np.concatenate((x, X[-1]))
+    print("x.size", x.size)
+    return x
+
+
 
 def change_phases(PhasesOrig, I, X):
     """

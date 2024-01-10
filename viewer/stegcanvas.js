@@ -184,7 +184,7 @@ class StegCanvas {
         if (params === undefined) {
             params = {};
         }
-        let defaultParams = {"win":1024, "shift":0, "L":16, "Q":4, "freq1":1, "freq2":2, "freq3":-1, "colormap":"Spectral"};
+        let defaultParams = {"win":1024, "shift":0, "L":16, "Q":4, "freq1":1, "freq2":2, "freq3":-1, "colormap":"Spectral", "LT":0};
         for (let param in defaultParams) {
             if (param in params) {
                 this[param] = params[param];
@@ -241,6 +241,7 @@ class StegCanvas {
         this.folder = folder;
         this.stippleSize = 0.2;
         this.winGUI = folder.add(this, "win", 0, this.sr, 1).onChange(this.extractSignal.bind(this));
+        this.LTGUI = folder.add(this, "LT", 0, this.win/8, 1).listen().onChange(this.extractSignal.bind(this));
         this.shiftGUI = folder.add(this, "shift", 0, this.win, 1).listen().onChange(this.extractSignal.bind(this));
         this.winGUI.onChange(
             function(v) {
@@ -319,7 +320,7 @@ class StegCanvas {
             if (this.freq3 > -1) {
                 freqs.push(this.freq3);
             }
-            let payload = {samples:that.audioSamples, win:that.win, shift:that.shift, L:that.L, Q:that.Q, freqs:freqs};
+            let payload = {samples:that.audioSamples, win:that.win, LT:that.LT, shift:that.shift, L:that.L, Q:that.Q, freqs:freqs};
             worker.postMessage(payload);
             worker.onmessage = function(event) {
                 if (event.data.type == "newTask") {

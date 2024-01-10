@@ -17,7 +17,7 @@
   <body>
     <h2>A 3D Model of A Chair Hidden in "Someone Keeps Moving My Chair" by They Might Be Giants</h2>
     <h3>
-      &ell;=16, &lambda; = 0.5, snr=7.04dB, Mean Distortion = 0.033
+      &ell;=16, &lambda; = 0.5, <span style="color:red">LT = 64</span>, snr=7.03dB, Mean Distortion = 0.03, <span style="color:red">De-clicked version 1/9/2024</span>
     </h3>
     <p>
       Click and drag to rotate!
@@ -37,7 +37,7 @@
       let audioPlayer = document.getElementById("audioPlayer");
       let audio = new SampledAudio(audioPlayer);
       const canvasArea = document.getElementById("canvasArea");
-      audio.loadFile("tmbg-chair-3d.mp3", canvasArea, {"freq1":3, "freq2":1, "freq3":2});
+      audio.loadFile("tmbg-chair-3d.mp3", canvasArea, {"freq1":3, "freq2":1, "freq3":2, "LT":64});
     </script>
 
     </body>

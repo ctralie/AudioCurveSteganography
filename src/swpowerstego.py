@@ -11,7 +11,7 @@ class StegoWindowedPower(StegoSolver):
     """
     A class for doing sliding window power on some nonnegative coefficients
     """
-    def __init__(self, target, coeffs, win, fit_lam=1, q=-1, rescale_targets=True, do_viterbi=2):
+    def __init__(self, target, coeffs, win, fit_lam=1, q=-1, rescale_targets=True, do_viterbi=False, viterbi_K=-1):
         """
         Parameters
         ----------
@@ -30,6 +30,8 @@ class StegoWindowedPower(StegoSolver):
             If true, solve for a and be to best match signals_i = a*targets_i+b
         do_viterbi: bool
             Whether to do Viterbi to find a better path
+        viterbi_K: int
+            Warping factor for Viterbi
         """
         self.win = win
         self.fit_lam = fit_lam
@@ -52,7 +54,7 @@ class StegoWindowedPower(StegoSolver):
             res = Mat.dot(Y)
             signals.append(res[0:M])
         self.targets = [target[:, k] for k in range(target.shape[1])]
-        self.setup_targets(signals, rescale_targets, do_viterbi)
+        self.setup_targets(signals, rescale_targets, do_viterbi, viterbi_K)
         
     def solve(self, verbose=0, mn=0, mx=np.inf, use_constraints=True, verbose_time=True):
         """
@@ -119,7 +121,7 @@ class StegoWindowedPower(StegoSolver):
 from spectrogramtools import *
 
 class STFTPowerDisjoint(StegoWindowedPower):
-    def __init__(self, x, target, win_length, mag_idxs, phase_idxs, win, fit_lam=1, q=-1, rescale_targets=True, do_viterbi=True, Q=4):
+    def __init__(self, x, target, win_length, mag_idxs, phase_idxs, win, fit_lam=1, q=-1, rescale_targets=True, do_viterbi=True, viterbi_K=-1, Q=4, LT=0):
         """
         Parameters
         ----------
@@ -146,17 +148,25 @@ class STFTPowerDisjoint(StegoWindowedPower):
             Whether to do Viterbi to find a better path
         Q: int
             Use 2*pi/Q range to store each phase encoded component
+        LT: int
+            Buffer length for transitions in between STFT windows.  This is referred to as "LT" in 
+            "FFT-Based Dual-Mode Blind Watermarking for Hiding Binary Logos and Color Images in Audio"
+            Hu/Wu/Lee 2023
         """
         ## Step 1: Compute STFT and setup magnitude 
         self.win_length = win_length
         self.mag_idxs = mag_idxs
-        SX = stft_disjoint(x, win_length)
+        self.LT = LT
+        if LT > 0:
+            SX, self.X_Orig, self.gaps = stft_disjoint_gaps(x, win_length, LT)
+        else:
+            SX = stft_disjoint(x, win_length)
         self.SXM = np.abs(SX) # Original magnitude
 
         ## Step 2: Setup sliding windows for magnitude components, with target
         ## the shape of the signal
         StegoSolver.__init__(self, x, target)
-        self.MagSolver = StegoWindowedPower(target, [self.SXM[f, :] for f in mag_idxs], win, fit_lam, q, rescale_targets=rescale_targets, do_viterbi=do_viterbi)
+        self.MagSolver = StegoWindowedPower(target, [self.SXM[f, :] for f in mag_idxs], win, fit_lam, q, rescale_targets=rescale_targets, do_viterbi=do_viterbi, viterbi_K=viterbi_K)
 
         ## Step 3: Setup solvers phase components, with target a repeated constant
         ## indicating the scale of each component
@@ -186,7 +196,7 @@ class STFTPowerDisjoint(StegoWindowedPower):
     
     def reconstruct_signal(self):
         """
-        Return the 1D time series after inverting the STFT
+        Return the audio after inverting the STFT
         """
         ## Step 1: Recover magnitude components
         SXM = np.array(self.SXM)
@@ -208,8 +218,12 @@ class STFTPowerDisjoint(StegoWindowedPower):
         p = P[HighDiff <= LowDiff]
         P[HighDiff <= LowDiff] = inc*np.ceil(p/inc) - 0.5*inc*X[HighDiff <= LowDiff]
         SXP[self.phase_idxs, :] = P
-
-        return istft_disjoint(SXM*np.exp(1j*SXP))
+        S = SXM*np.exp(1j*SXP)
+        if self.LT == 0:
+            x = istft_disjoint(S)
+        else:
+            x = istft_disjoint_gaps(S, self.X_Orig, self.gaps)
+        return x
     
     def get_signal(self, normalize=True):
         """
@@ -269,7 +283,7 @@ def subdivide_wavelet_rec(coeffs, wavtype):
     return idwt(cA, cD, wavtype)
 
 class WaveletCoeffs(StegoWindowedPower):
-    def __init__(self, x, target, win, fit_lam=1, wavtype='haar', wavlevel=7, coefflevel=1, q=-1, do_viterbi=True):
+    def __init__(self, x, target, win, fit_lam=1, wavtype='haar', wavlevel=7, coefflevel=1, q=-1, do_viterbi=True, viterbi_K=-1):
         """
         Parameters
         ----------
@@ -290,6 +304,8 @@ class WaveletCoeffs(StegoWindowedPower):
             If -1, go up to infinity
         do_viterbi: boolean
             Whether or not to do viterbi coding to find a better path
+        viterbi_K: int
+            Warping factor for Viterbi
         """
         StegoSolver.__init__(self, x, target)
         ## Step 1: Compute wavelets at all levels
@@ -304,7 +320,7 @@ class WaveletCoeffs(StegoWindowedPower):
         ## Step 2: Setup all aspects of sliding windows
         # Signs of wavelet coefficients before squaring
         self.signs = [np.sign(x) for x in coeffs_mod] 
-        StegoWindowedPower.__init__(self, target, [p**2 for p in coeffs_mod], win, fit_lam, q, do_viterbi=do_viterbi)
+        StegoWindowedPower.__init__(self, target, [p**2 for p in coeffs_mod], win, fit_lam, q, do_viterbi=do_viterbi, viterbi_K=viterbi_K)
 
     
     def reconstruct_signal(self):
@@ -362,7 +378,7 @@ def get_rotated_distortion(Y, Z, flip, theta):
     return Z, np.mean(d)
 
 class STFTPowerDisjointPCA(StegoWindowedPower):
-    def __init__(self, x, target, sr, win_length, min_freq, max_freq, win, fit_lam=1, q=-1, pca=None, do_viterbi=True):
+    def __init__(self, x, target, sr, win_length, min_freq, max_freq, win, fit_lam=1, q=-1, pca=None, do_viterbi=True, viterbi_K=-1):
         """
         Parameters
         ----------
@@ -387,6 +403,8 @@ class STFTPowerDisjointPCA(StegoWindowedPower):
             If -1, go up to infinity
         do_viterbi: boolean
             Whether or not to do viterbi coding to find a better path
+        viterbi_K: int
+            Warping factor for Viterbi
         """
         StegoSolver.__init__(self, x, target)
         ## Step 1: Compute STFT
@@ -409,7 +427,7 @@ class STFTPowerDisjointPCA(StegoWindowedPower):
         self.pca = pca
 
         ## Step 2: Setup all aspects of sliding windows
-        StegoWindowedPower.__init__(self, target, Y.T, win, fit_lam, q, do_viterbi=do_viterbi)
+        StegoWindowedPower.__init__(self, target, Y.T, win, fit_lam, q, do_viterbi=do_viterbi, viterbi_K=viterbi_K)
 
     
     def reconstruct_signal(self):
