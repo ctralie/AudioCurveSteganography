@@ -90,6 +90,17 @@ def arclen_resample(X, s, N):
         Y[:, i] = np.interp(t, s, X[:, i])
     return Y
 
+def arclen_resample_linear(X, N):
+    d = X.shape[1]
+    diff = np.sqrt(np.sum((X[1::, :] - X[0:-1, :])**2, axis=1))
+    s = np.cumsum(np.concatenate(([0], diff)))
+    s = s/np.max(s)
+    t = np.linspace(0, 1*(N-1)/N, N)
+    Y = np.zeros((N, d))
+    for i in range(d):
+        Y[:, i] = np.interp(t, s, X[:, i])
+    return Y
+
 
 def get_zcs(Curvs, loop=False):
     """

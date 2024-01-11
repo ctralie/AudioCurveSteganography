@@ -247,6 +247,10 @@ def get_tsp_tour(X, max_iters=10000, plot_interval=0):
         node.visited = False
         node.i = i
     order = do_dfs(nodes[0])
+    if len(order) < X.shape[0]:
+        print("Warning: Degenerate Delaunay triangulation: adding small amount of noise")
+        X += 1e-4*(np.max(X[:, 0])-np.min(X[:, 0]))*np.random.randn(X.shape[0], 2)
+        return get_tsp_tour(X, max_iters, plot_interval)
     order.append(order[0])
     X = np.array([n.coords for n in nodes])
     idxs = [n.i for n in order]

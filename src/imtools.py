@@ -134,7 +134,7 @@ def get_weights(I, thresh, p=1, canny_sigma=0, edge_weight=1):
         I = I/255
     if len(I.shape) > 2:
         I = 0.2125*I[:, :, 0] + 0.7154*I[:, :, 1] + 0.0721*I[:, :, 2]
-    ## Step 1: Get weights and initialize random point distributin
+    ## Step 1: Get weights and initialize random point distribution
     weights = np.array(I)
     if np.max(weights) > 1:
         weights /= 255
@@ -327,3 +327,47 @@ def voronoi_stipple(I, thresh, target_points, p=1, canny_sigma=0, edge_weight=1,
 
     X[:, 0] = I.shape[0]-X[:, 0]
     return np.fliplr(X)
+
+def get_char_freetype(face, c):
+    face.load_char(c)
+    X = []
+    def move_to(p, _):
+        X.append([p.x, p.y])
+    def segment_to(*args):
+        *args, _ = args
+        X.extend([[p.x, p.y] for p in args])
+    face.glyph.outline.decompose(None, move_to, segment_to, segment_to, segment_to)
+    return np.array(X, dtype=float)
+
+def get_string_freetype(face, s, samples_per_char, space=1):
+    """
+    Compute the points on a TTF font curve
+    Requires installation of freetype-py package
+
+    Parameters
+    ----------
+    face: freetype.Face
+        Face object
+    s: string
+        String to create
+    samples_per_char: int
+        Number of samples per letter in the string
+    space: float
+        Spacing between characters
+    """
+    from curvature import arclen_resample_linear
+    # Calibrate width with @ symbol
+    Xw = get_char_freetype(face, ".")
+    width = np.max(Xw[:, 0]) - np.min(Xw[:, 0])
+    X = np.zeros((0, 2))
+    offset = 0
+    for c in s:
+        Xc = get_char_freetype(face, c)
+        cwidth = width
+        if Xc.size > 0:
+            Xc[:, 0] += offset
+            Xc = arclen_resample_linear(Xc, samples_per_char)
+            cwidth = np.max(Xc[:, 0])-np.min(Xc[:, 0])
+            X = np.concatenate((X, Xc), axis=0)
+        offset += cwidth + space*width
+    return X
